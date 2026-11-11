@@ -43,6 +43,7 @@ above has been met.
 proton/                      upstream Proton tree, pinned submodule (do not edit)
 overrides.conf               replace one of the upstream tree's components with another commit
                              (lines of: <path-inside-proton> <git-url> <40-char-sha>)
+extras.conf                  add a source tree the upstream tree does not have (same line format)
 patches/<component>/*.patch  our patches, applied in lexicographic order with git apply
                              (patches/proton/ applies at the root of the proton checkout;
                              any other directory applies inside proton/<component>)
@@ -82,6 +83,21 @@ modifications; use a fresh clone.
 2. Restart Steam.
 3. For each game: Properties, Compatibility, tick "Force the use of a specific
    Steam Play compatibility tool", and select the EX-Proton build.
+
+## Options added by EX-Proton
+
+Set these per game in Steam's launch options, for example
+`PROTON_DXVK_LOWLATENCY=1 %command%`. Everything the base provides
+(`PROTON_ENABLE_WAYLAND`, `LOW_LATENCY_LAYER`, `PROTON_FSR4_UPGRADE`, ...) is
+documented in `proton/README.md`.
+
+| Variable | Effect |
+|---|---|
+| `PROTON_DXVK_LOWLATENCY=1` | Use the low-latency DXVK build (D3D8-11) instead of the stock one. |
+| `PROTON_VKD3D_LOWLATENCY=1` | Use the low-latency vkd3d-proton build (D3D12) instead of the stock one. |
+
+Both are off by default; see [PATCHES.md](PATCHES.md) for what they are and
+their limits.
 
 ## Limitations
 

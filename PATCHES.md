@@ -34,15 +34,46 @@ These come from Proton-GE and need nothing from this repository:
 
 None enabled.
 
+## Extra source trees (`extras.conf`)
+
+Built beside the stock components and off unless the environment variable is
+set for a game. The side-by-side approach is the one proton-cachyos and
+DW-Proton use; both pin the same two commits.
+
+| Path | Source | Enabled with | Notes |
+|---|---|---|---|
+| `extras/dxvk-low-latency` | https://github.com/netborg-afps/dxvk-low-latency `d533db09df35453ed1baa1b0c7d86de2b67bf504` (release "3.1.1-low-latency", 2026-09-24). Zlib. | `PROTON_DXVK_LOWLATENCY=1` | D3D8-11. Low-latency frame pacing is this fork's default mode. It is 153 commits behind the DXVK that GE pins, which is why it is opt-in rather than a replacement. Also sets `dxvk.numCompilerThreads` to leave two cores free (one on 3-4 core machines), as proton-cachyos does. |
+| `extras/vkd3d-low-latency` | https://github.com/netborg-afps/vkd3d-low-latency `f4e0518cdd35fee0629e25367422bcbc17cbc122` (2026-10-02). LGPL-2.1. | `PROTON_VKD3D_LOWLATENCY=1` | D3D12. Its README lists Intel GPUs, AMD Anti-Lag 2 and frame generation as unsupported. GE's three vkd3d-proton patches are not applied to it (one of them does not apply to this fork). |
+
+Latency benefits are the fork author's claims; nothing has been measured here.
+
 ## Patches (`patches/`)
 
-None.
+Applied after Proton-GE's own patch script.
 
-## Candidates under review
+| File | What it does | Source | Check |
+|---|---|---|---|
+| `patches/wine/0001-ntdll-make-futex-spinlock-adaptive.patch` | The spinlock guarding ntdll's futex queues spins a bounded number of times before yielding. | CachyOS/wine-cachyos commit `3653b6d3c34bd2a1a6af1ea0dee59b33595b3cfc` (author Marc-Aurel Zent, CodeWeavers) | Applies with `git apply` to GE's Wine pin `fda79a58` after GE's three patches to the same file. Not checked against wine-staging's changes; CI is the check. |
+| `patches/wine/0002-ntdll-increase-number-of-futex-queues-to-1024.patch` | More futex queues, so unrelated `WaitOnAddress` / SRW lock / critical section waiters share a queue less often. | same repo, `276ba28d82c05877226358e9c761dca2dbdf2b81` | as above |
+| `patches/wine/0003-ntdll-improve-futex-queue-selection.patch` | Hashes the address when picking a queue to reduce collisions. | same repo, `324f95f15f12f97fd444436a69ea2df0f7a75eae` | as above |
+| `patches/proton/0001-ex-proton-optional-low-latency-dxvk-and-vkd3d-builds.patch` | Adds build rules for the two extra trees above (`extras/build-*.mk`, modelled on the stock DXVK / vkd3d-proton rules and proton-cachyos' extras) and the launcher-script switches. Written for EX-Proton. | this repository | Applies with `git apply` to the base tree. |
 
-Changes from proton-cachyos, Proton-EM and DW-Proton that Proton-GE does not
-already carry are being evaluated. Anything adopted is listed above with its
-source, commit and verification status.
+## Reviewed and not taken
+
+From the comparison of proton-cachyos (`cachyos_11.0_20261014`), Proton-EM
+(`em-11`) and DW-Proton (`dwproton-11.0-16`) against GE-Proton11-12:
+
+| Item | From | Why not |
+|---|---|---|
+| Wayland driver, HDR, FSR4/MLFG, keyboard and input work | Proton-EM | Already in the base: GE imports it as about 300 patches. |
+| NtDelayExecution via QPC, `WINE_ENABLE_HARDWARE_SCHEDULING`, avoiding `CLOCK_REALTIME_COARSE`, top-down allocation for LAA | proton-cachyos / Proton-EM | Already in the base (GE's `wine-wayland/0163`, `0143`, `0082` and `pending/`). |
+| Replacing GE's DXVK / vkd3d-proton outright with the low-latency forks | proton-cachyos | Would change pacing for every game and drop GE's newer commits; one GE vkd3d patch does not apply to the fork. Taken as opt-in extras instead. |
+| Small Wayland-only fixes newer than GE's import (leak fixes, popup guard, a keyboard layout fix, FSR4 init-once) | Proton-EM | Low value for the goals here and not checkable against GE's heavily patched Wayland driver without a build. Candidates for later. |
+| `-O3 -mno-avx` and other compiler flag changes | proton-cachyos | No measured benefit in any source. |
+| gplasync (asynchronous shader compilation) for DXVK | DW-Proton / proton-cachyos | Can cause visual glitches and its author warns against use in games with anti-cheat. |
+| Anti-cheat driver emulation, signature and connection workarounds | DW-Proton | Not carried. |
+| GStreamer-path media patches | DW-Proton / proton-cachyos | GE replaced that media backend. |
+| `low_latency_layer` one-commit bump, vkBasalt patches, dxvk-sarek, ZLUDA, PipeWire driver, game-specific protonfixes | various | Little or no bearing on the goals here. |
 
 ## History
 

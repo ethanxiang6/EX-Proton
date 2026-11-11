@@ -1,0 +1,188 @@
+diff --git a/Makefile.in b/Makefile.in
+index e4039398d..36800454c 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -970,6 +970,12 @@ $(OBJ)/.vkd3d-proton-post-source:
+ 	echo "$(shell git -C $(SRCDIR) submodule status -- vkd3d-proton || echo no-git-repo-info)" > $(DST_LIBDIR)/wine/vkd3d-proton/version
+ 	touch $@
+ 
++##
++## EX-Proton extras (optional low-latency DXVK / vkd3d-proton builds)
++##
++include $(SRC)/extras/build-dxvk-low-latency.mk
++include $(SRC)/extras/build-vkd3d-low-latency.mk
++
+ 
+ ##
+ ## nvidia-libs
+diff --git a/extras/build-dxvk-low-latency.mk b/extras/build-dxvk-low-latency.mk
+new file mode 100644
+index 000000000..44a476b1e
+--- /dev/null
++++ b/extras/build-dxvk-low-latency.mk
+@@ -0,0 +1,44 @@
++##
++## dxvk-low-latency (EX-Proton)
++##
++## Optional second DXVK build from netborg-afps/dxvk-low-latency, installed
++## beside the stock DXVK and selected at run time with PROTON_DXVK_LOWLATENCY=1.
++## Build rules mirror the stock dxvk rules in Makefile.in; the side-by-side
++## layout follows proton-cachyos' extras/build-dxvk-low-latency.mk.
++## Only built when the source tree is present (scripts/prepare.sh clones it
++## from extras.conf).
++
++ifneq ($(wildcard $(SRCDIR)/extras/dxvk-low-latency/meson.build),)
++
++# wine builds DLLs with the same names, we need to differentiate the timestamps
++DXVK_LOW_LATENCY_i386_SOURCE_DATE_EPOCH := $(shell expr $(i386_SOURCE_DATE_EPOCH) - 3)
++DXVK_LOW_LATENCY_x86_64_SOURCE_DATE_EPOCH := $(shell expr $(x86_64_SOURCE_DATE_EPOCH) - 3)
++DXVK_LOW_LATENCY_arm64ec_SOURCE_DATE_EPOCH := $(shell expr $(arm64ec_SOURCE_DATE_EPOCH) - 3)
++
++DXVK_LOW_LATENCY_SOURCE_ARGS = \
++  --exclude version.h.in \
++
++DXVK_LOW_LATENCY_arm64ec_CFLAGS = -marm64x
++DXVK_LOW_LATENCY_arm64ec_LDFLAGS = -marm64x
++
++DXVK_LOW_LATENCY_i386_MESON_ARGS = --bindir=$(DXVK_LOW_LATENCY_i386_DST)/lib/wine/dxvk-low-latency/i386-windows
++DXVK_LOW_LATENCY_x86_64_MESON_ARGS = --bindir=$(DXVK_LOW_LATENCY_x86_64_DST)/lib/wine/dxvk-low-latency/x86_64-windows
++DXVK_LOW_LATENCY_arm64ec_MESON_ARGS = --bindir=$(DXVK_LOW_LATENCY_arm64ec_DST)/lib/wine/dxvk-low-latency/aarch64-windows
++DXVK_LOW_LATENCY_HOST_DEPENDS = glslang
++
++$(eval $(call rules-source,dxvk-low-latency,$(SRCDIR)/extras/dxvk-low-latency))
++$(eval $(call rules-meson,dxvk-low-latency,i386,windows))
++$(eval $(call rules-meson,dxvk-low-latency,x86_64,windows))
++$(eval $(call rules-meson,dxvk-low-latency,arm64ec,windows))
++
++$(OBJ)/.dxvk-low-latency-post-source:
++	sed -re 's#@VCS_TAG@#$(shell git -C $(SRCDIR)/extras/dxvk-low-latency describe --always --abbrev=15 || echo deadbeef)-low-latency#' \
++	    $(SRCDIR)/extras/dxvk-low-latency/version.h.in > $(DXVK_LOW_LATENCY_SRC)/version.h.in
++	mkdir -p $(DST_LIBDIR)/wine/dxvk-low-latency
++	rm -rf $(DST_LIBDIR)/wine/dxvk-low-latency/version
++	echo "$(shell git -C $(SRCDIR)/extras/dxvk-low-latency rev-parse HEAD 2>/dev/null || echo no-git-repo-info)" > $(DST_LIBDIR)/wine/dxvk-low-latency/version
++	touch $@
++
++default_pfx: dxvk-low-latency
++
++endif # extras/dxvk-low-latency present
+diff --git a/extras/build-vkd3d-low-latency.mk b/extras/build-vkd3d-low-latency.mk
+new file mode 100644
+index 000000000..7a8e7f1ae
+--- /dev/null
++++ b/extras/build-vkd3d-low-latency.mk
+@@ -0,0 +1,53 @@
++##
++## vkd3d-low-latency (EX-Proton)
++##
++## Optional second vkd3d-proton build from netborg-afps/vkd3d-low-latency,
++## installed beside the stock vkd3d-proton and selected at run time with
++## PROTON_VKD3D_LOWLATENCY=1. Build rules mirror the stock vkd3d-proton rules
++## in Makefile.in; the side-by-side layout follows proton-cachyos'
++## extras/build-vkd3d-low-latency.mk.
++## Only built when the source tree is present (scripts/prepare.sh clones it
++## from extras.conf).
++
++ifneq ($(wildcard $(SRCDIR)/extras/vkd3d-low-latency/meson.build),)
++
++# wine builds DLLs with the same names, we need to differentiate the timestamps
++VKD3D_LOW_LATENCY_i386_SOURCE_DATE_EPOCH := $(shell expr $(i386_SOURCE_DATE_EPOCH) - 4)
++VKD3D_LOW_LATENCY_x86_64_SOURCE_DATE_EPOCH := $(shell expr $(x86_64_SOURCE_DATE_EPOCH) - 4)
++VKD3D_LOW_LATENCY_arm64ec_SOURCE_DATE_EPOCH := $(shell expr $(arm64ec_SOURCE_DATE_EPOCH) - 4)
++
++VKD3D_LOW_LATENCY_SOURCE_ARGS = \
++  --exclude vkd3d_build.h.in \
++  --exclude vkd3d_version.h.in \
++
++VKD3D_LOW_LATENCY_MESON_ARGS = -Db_ndebug=true -Denable_extended_emulation=true
++VKD3D_LOW_LATENCY_i386_MESON_ARGS = --bindir=$(VKD3D_LOW_LATENCY_i386_DST)/lib/wine/vkd3d-low-latency/i386-windows
++VKD3D_LOW_LATENCY_x86_64_MESON_ARGS = --bindir=$(VKD3D_LOW_LATENCY_x86_64_DST)/lib/wine/vkd3d-low-latency/x86_64-windows
++VKD3D_LOW_LATENCY_arm64ec_MESON_ARGS = --bindir=$(VKD3D_LOW_LATENCY_arm64ec_DST)/lib/wine/vkd3d-low-latency/aarch64-windows
++VKD3D_LOW_LATENCY_HOST_DEPENDS = glslang
++
++VKD3D_LOW_LATENCY_arm64ec_CFLAGS = -marm64x
++VKD3D_LOW_LATENCY_arm64ec_LDFLAGS = -marm64x
++
++ifneq ($(UNSTRIPPED_BUILD),)
++	VKD3D_LOW_LATENCY_MESON_ARGS = -Denable_trace=true
++endif
++
++$(eval $(call rules-source,vkd3d-low-latency,$(SRCDIR)/extras/vkd3d-low-latency))
++$(eval $(call rules-meson,vkd3d-low-latency,i386,windows))
++$(eval $(call rules-meson,vkd3d-low-latency,x86_64,windows))
++$(eval $(call rules-meson,vkd3d-low-latency,arm64ec,windows))
++
++$(OBJ)/.vkd3d-low-latency-post-source:
++	sed -re 's#@VCS_TAG@#$(shell git -C $(SRCDIR)/extras/vkd3d-low-latency describe --always --exclude=* --abbrev=15 --dirty=0 || echo deadbeef)#' \
++	    $(SRCDIR)/extras/vkd3d-low-latency/vkd3d_build.h.in > $(VKD3D_LOW_LATENCY_SRC)/vkd3d_build.h.in
++	sed -re 's#@VCS_TAG@#$(shell git -C $(SRCDIR)/extras/vkd3d-low-latency describe --always --tags || echo deadbeef)-low-latency#' \
++	    $(SRCDIR)/extras/vkd3d-low-latency/vkd3d_version.h.in > $(VKD3D_LOW_LATENCY_SRC)/vkd3d_version.h.in
++	mkdir -p $(DST_LIBDIR)/wine/vkd3d-low-latency
++	rm -rf $(DST_LIBDIR)/wine/vkd3d-low-latency/version
++	echo "$(shell git -C $(SRCDIR)/extras/vkd3d-low-latency rev-parse HEAD 2>/dev/null || echo no-git-repo-info)" > $(DST_LIBDIR)/wine/vkd3d-low-latency/version
++	touch $@
++
++default_pfx: vkd3d-low-latency
++
++endif # extras/vkd3d-low-latency present
+diff --git a/proton b/proton
+index 032bcd062..3c55a4681 100755
+--- a/proton
++++ b/proton
+@@ -1481,10 +1481,26 @@ class CompatData:
+                     try_copy(g_proton.default_pfx_dir + "drive_c/windows/syswow64/" + f + ".dll", "drive_c/windows/syswow64",
+                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
+ 
++                # EX-Proton: optional low-latency builds, selected per launch with
++                # PROTON_DXVK_LOWLATENCY=1 / PROTON_VKD3D_LOWLATENCY=1. Fall back to
++                # the stock builds when the low-latency ones were not built.
++                dxvk_dir = "wine/dxvk"
++                if "dxvklowlatency" in g_session.compat_config:
++                    if os.path.isdir(g_proton.lib_dir + "wine/dxvk-low-latency"):
++                        dxvk_dir = "wine/dxvk-low-latency"
++                    else:
++                        log("PROTON_DXVK_LOWLATENCY set but this build has no dxvk-low-latency; using stock DXVK")
++                vkd3d_proton_dir = "wine/vkd3d-proton"
++                if "vkd3dlowlatency" in g_session.compat_config:
++                    if os.path.isdir(g_proton.lib_dir + "wine/vkd3d-low-latency"):
++                        vkd3d_proton_dir = "wine/vkd3d-low-latency"
++                    else:
++                        log("PROTON_VKD3D_LOWLATENCY set but this build has no vkd3d-low-latency; using stock vkd3d-proton")
++
+                 for f in dxvkfiles:
+-                    try_copy(g_proton.arch_pe_dir("wine/dxvk", False) + f + ".dll", "drive_c/windows/system32",
++                    try_copy(g_proton.arch_pe_dir(dxvk_dir, False) + f + ".dll", "drive_c/windows/system32",
+                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
+-                    try_copy(g_proton.arch_pe_dir("wine/dxvk", True) + f + ".dll", "drive_c/windows/syswow64",
++                    try_copy(g_proton.arch_pe_dir(dxvk_dir, True) + f + ".dll", "drive_c/windows/syswow64",
+                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
+                     g_session.dlloverrides[f] = "n"
+ 
+@@ -1492,9 +1508,9 @@ class CompatData:
+                     optional = False
+                     if f == "d3d12core":
+                         optional = True
+-                    try_copy(g_proton.arch_pe_dir("wine/vkd3d-proton", False) + f + ".dll", "drive_c/windows/system32",
++                    try_copy(g_proton.arch_pe_dir(vkd3d_proton_dir, False) + f + ".dll", "drive_c/windows/system32",
+                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True, optional=optional)
+-                    try_copy(g_proton.arch_pe_dir("wine/vkd3d-proton", True) + f + ".dll", "drive_c/windows/syswow64",
++                    try_copy(g_proton.arch_pe_dir(vkd3d_proton_dir, True) + f + ".dll", "drive_c/windows/syswow64",
+                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True, optional=optional)
+                     g_session.dlloverrides[f] = "n"
+ 
+@@ -2425,6 +2441,16 @@ class Session:
+         if "vkreflex" in self.compat_config and "disablenvapi" not in self.compat_config and utilities.is_driver_loaded({'nvidia'}):
+             append_to_env_str(self.env, "VK_IMPLICIT_LAYER_PATH", g_proton.dist_dir + "share/dxvk-nvapi-vkreflex-layer/implicit_layer.d", ":")
+ 
++        # EX-Proton: opt-in low-latency DXVK / vkd3d-proton builds (see
++        # setup_prefix). Shader compiler thread count follows proton-cachyos:
++        # leave two cores free on machines with more than four.
++        self.check_environment("PROTON_DXVK_LOWLATENCY", "dxvklowlatency")
++        self.check_environment("PROTON_VKD3D_LOWLATENCY", "vkd3dlowlatency")
++        if "dxvklowlatency" in self.compat_config:
++            cpus = os.cpu_count() or 1
++            threads = cpus - (2 if cpus > 4 else (1 if cpus > 2 else 0))
++            append_to_env_str(self.env, "DXVK_CONFIG", f"dxvk.numCompilerThreads={threads}", ";")
++
+         self.check_environment("LOW_LATENCY_LAYER", "lowlatencylayer")
+         if "lowlatencylayer" in self.compat_config:
+             append_to_env_str(self.env, "VK_IMPLICIT_LAYER_PATH", g_proton.dist_dir + "share/low_latency_layer/implicit_layer.d", ":")

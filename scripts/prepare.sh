@@ -111,6 +111,50 @@ else
     info "no overrides.conf; skipping overrides"
 fi
 
+# --- 2b. extra source trees ---------------------------------------------------
+# extras.conf: <new-path-inside-proton> <git-url> <40-char-sha>. Unlike an
+# override this adds a source tree the upstream tree does not have (built by
+# rules our patches/proton/ patches add).
+EXTRAS="$ROOT/extras.conf"
+n_extra=0
+if [ -f "$EXTRAS" ]; then
+    lineno=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        lineno=$((lineno + 1))
+        line="${line%$'\r'}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        case "$line" in ''|'#'*) continue ;; esac
+
+        read -r epath eurl esha extra <<<"$line"
+        [ -n "${epath:-}" ] && [ -n "${eurl:-}" ] && [ -n "${esha:-}" ] \
+            || die "extras.conf:$lineno: expected '<path> <git-url> <sha>', got: $line"
+        [ -z "${extra:-}" ] || die "extras.conf:$lineno: unexpected extra fields: $extra"
+        [[ "$esha" =~ ^[0-9a-f]{40}$ ]] || die "extras.conf:$lineno: '$esha' is not a lowercase 40-char SHA"
+        case "$epath" in
+            /*|..|../*|*/..|*/../*) die "extras.conf:$lineno: bad path '$epath' (must be relative, inside proton)" ;;
+        esac
+
+        edir="$PROTON/$epath"
+        [ ! -e "$edir" ] || die "extras.conf:$lineno: proton/$epath already exists (use overrides.conf to replace a component)"
+
+        info "extra: proton/$epath <- $esha ($eurl)"
+        mkdir -p "$edir"
+        git -C "$edir" init -q
+        git -C "$edir" fetch --no-tags "$eurl" "$esha" \
+            || die "extras.conf:$lineno: fetch of $esha from $eurl failed"
+        git -C "$edir" checkout -q --detach FETCH_HEAD \
+            || die "extras.conf:$lineno: checkout failed in proton/$epath"
+        [ "$(git -C "$edir" rev-parse HEAD)" = "$esha" ] \
+            || die "extras.conf:$lineno: HEAD is not $esha after checkout"
+        git -C "$edir" submodule update --init --recursive --jobs "$JOBS" \
+            || die "extras.conf:$lineno: nested submodule update failed in proton/$epath"
+        n_extra=$((n_extra + 1))
+    done < "$EXTRAS"
+else
+    info "no extras.conf; skipping extra source trees"
+fi
+
 # --- 3. Proton-GE's own patch step -------------------------------------------
 # GE applies its patch set to the submodules with this script (it resets each
 # submodule to HEAD first, which is why overrides run before it). GE's CI runs
@@ -169,4 +213,4 @@ else
     info "no patches/ directory; skipping patches"
 fi
 
-info "done: $n_over override(s), $n_patch patch(es) applied"
+info "done: $n_over override(s), $n_extra extra tree(s), $n_patch patch(es) applied"
