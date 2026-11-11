@@ -1,0 +1,217 @@
+# EXProton build workflow (UNTESTED - authored without being able to run it).
+#
+# Modelled on GloriousEggroll/proton-ge-custom .github/workflows/_job_build.yml
+# and release.yml (free disk space, ccache cache, out-of-tree build, artifact
+# upload, release on tag push), adapted to this overlay repo.
+#
+# Third-party actions (not published by GitHub/"actions"):
+#   - endersonmenezes/free-disk-space  (pinned to a full version tag)
+# Everything else is from the first-party "actions" organisation. The release
+# job uses the gh CLI preinstalled on the runner and the default GITHUB_TOKEN.
+#
+# Tags are pinned, not commit SHAs. Pinning third-party actions to a commit SHA
+# would be stricter; do that if you care about supply-chain hardening.
+
+name: Build EXProton
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-name:
+        description: "Build name (shown in Steam, used for the tarball name)"
+        required: false
+        default: "EXProton-11.0-2e-1"
+        type: string
+  push:
+    tags:
+      - "EXProton-*"
+
+concurrency:
+  group: exproton-build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    env:
+      # Inputs/refs are passed through env, never interpolated into scripts.
+      INPUT_BUILD_NAME: ${{ inputs.build-name }}
+      REF_TYPE: ${{ github.ref_type }}
+      REF_NAME: ${{ github.ref_name }}
+      # Variables starting with CCACHE_ are forwarded into Proton's container
+      # by Proton's Makefile.in (CCACHE_ENV).
+      CCACHE_MAXSIZE: 4G
+    steps:
+      - name: Determine build name
+        id: name
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = "tag" ]; then
+            name="$REF_NAME"
+          else
+            name="${INPUT_BUILD_NAME:-EXProton-11.0-2e-1}"
+          fi
+          if ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid build name: '$name' (allowed: A-Z a-z 0-9 . _ -)" >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Build name: $name"
+
+      # Third-party action. Inputs limited to those present in v3.2.2's action.yaml.
+      - name: Free disk space
+        uses: endersonmenezes/free-disk-space@v3.2.2
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
+          remove_swap: true
+          remove_packages: |
+            azure-cli google-cloud-cli google-chrome-stable firefox microsoft-edge-stable
+            postgresql* mysql* php* temurin-* *llvm* clang* mono-devel powershell dotnet-sdk-*
+          remove_folders: |
+            /usr/share/swift /usr/share/miniconda /usr/local/lib/node_modules
+            /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia*
+            /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/share/az*
+            /usr/local/.ghcup
+
+      - name: Disk usage before build
+        run: df -h
+
+      # Submodules are deliberately NOT fetched here; scripts/prepare.sh does it.
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: false
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v4.3.0
+        with:
+          path: ~/.ccache
+          key: ccache-exproton-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-exproton-${{ runner.os }}-
+
+      - name: Prepare Proton tree (submodules, overrides, patches)
+        run: ./scripts/prepare.sh --jobs "$(nproc)"
+
+      # CI only: build without debug info (-ggdb -> -s) so the build fits on a
+      # hosted runner's disk. Same idea as Proton-GE's CI strip patch.
+      - name: Strip binaries early (CI disk saving)
+        run: git -C proton apply --verbose ../.github/patches/0001-build-strip-binaries-early.patch
+
+      - name: Configure
+        shell: bash
+        env:
+          BUILD_NAME: ${{ steps.name.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir build
+          cd build
+          # The SDK image comes from Proton's Makefile.in default (steamrt4);
+          # it is intentionally not passed via --proton-sdk-image.
+          ../proton/configure.sh --enable-ccache --container-engine=docker --build-name="$BUILD_NAME"
+          make --silent get-steamrt-image || true
+
+      - name: Make redist
+        working-directory: ./build
+        run: |
+          df -h
+          make -j"$(nproc)" redist
+
+      - name: Disk usage after build
+        if: always()
+        run: df -h
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4.3.0
+        with:
+          path: ~/.ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+
+      # Proton's `make redist` only rsyncs the dist tree into build/redist/ (Makefile.in,
+      # redist target); it does not create a tarball, so we do it here. The top-level
+      # directory inside the tarball is the build name so it extracts straight into
+      # compatibilitytools.d/.
+      - name: Package tarball
+        shell: bash
+        env:
+          BUILD_NAME: ${{ steps.name.outputs.name }}
+        run: |
+          set -euo pipefail
+          cd build
+          test -f redist/compatibilitytool.vdf
+          test -f redist/LICENSE
+          tar --owner=0 --group=0 --numeric-owner --transform "s,^redist,${BUILD_NAME}," \
+              -czf "${BUILD_NAME}.tar.gz" redist
+          sha512sum "${BUILD_NAME}.tar.gz" > "${BUILD_NAME}.sha512sum"
+          ls -lh "${BUILD_NAME}.tar.gz" "${BUILD_NAME}.sha512sum"
+          cat "${BUILD_NAME}.sha512sum"
+          df -h
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: ${{ steps.name.outputs.name }}.tar.gz
+          path: ./build/${{ steps.name.outputs.name }}.tar.gz
+          if-no-files-found: error
+
+      - name: Upload checksum
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: ${{ steps.name.outputs.name }}.sha512sum
+          path: ./build/${{ steps.name.outputs.name }}.sha512sum
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download tarball
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: ${{ github.ref_name }}.tar.gz
+          path: dist
+
+      - name: Download checksum
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: ${{ github.ref_name }}.sha512sum
+          path: dist
+
+      - name: Verify checksum
+        run: |
+          cd dist
+          sha512sum -c "${TAG}.sha512sum"
+
+      - name: Create or update release
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; uploading assets (clobber)."
+            gh release upload "$TAG" "dist/${TAG}.tar.gz" "dist/${TAG}.sha512sum" --clobber
+          else
+            gh release create "$TAG" "dist/${TAG}.tar.gz" "dist/${TAG}.sha512sum" \
+              --verify-tag --title "$TAG" \
+              --notes "EXProton build $TAG. Untested community build; see README.md and PATCHES.md."
+          fi

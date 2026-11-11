@@ -1,0 +1,21 @@
+# Build output
+build/
+redist/
+dist/
+deploy/
+*.tar.gz
+*.tar.xz
+*.sha512sum
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Patch rejects and backups
+*.orig
+*.rej

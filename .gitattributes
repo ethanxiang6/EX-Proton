@@ -1,0 +1,8 @@
+# Force LF line endings for scripts and text that is parsed by Linux tooling.
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.conf  text eol=lf
+*.md    text eol=lf
+
+# Patches must never be altered (whitespace/line endings matter to git apply).
+*.patch -text
