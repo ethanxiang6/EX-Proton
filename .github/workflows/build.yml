@@ -1,18 +1,16 @@
-# EXProton build workflow (UNTESTED - authored without being able to run it).
+# EX-Proton build workflow.
 #
-# Modelled on GloriousEggroll/proton-ge-custom .github/workflows/_job_build.yml
-# and release.yml (free disk space, ccache cache, out-of-tree build, artifact
-# upload, release on tag push), adapted to this overlay repo.
+# Follows GloriousEggroll/proton-ge-custom .github/workflows/_job_build.yml
+# (free disk space, host ccache + fontforge, ccache cache, GE patch step, CI
+# strip patch, build in ./build, artifact upload), adapted to this overlay repo
+# where Proton-GE is the `proton` submodule.
 #
 # Third-party actions (not published by GitHub/"actions"):
 #   - endersonmenezes/free-disk-space  (pinned to a full version tag)
 # Everything else is from the first-party "actions" organisation. The release
 # job uses the gh CLI preinstalled on the runner and the default GITHUB_TOKEN.
-#
-# Tags are pinned, not commit SHAs. Pinning third-party actions to a commit SHA
-# would be stricter; do that if you care about supply-chain hardening.
 
-name: Build EXProton
+name: Build EX-Proton
 
 on:
   workflow_dispatch:
@@ -20,14 +18,14 @@ on:
       build-name:
         description: "Build name (shown in Steam, used for the tarball name)"
         required: false
-        default: "EXProton-11.0-2e-1"
+        default: "EX-Proton11-1"
         type: string
   push:
     tags:
-      - "EXProton-*"
+      - "EX-Proton*"
 
 concurrency:
-  group: exproton-build-${{ github.ref }}
+  group: ex-proton-build-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -57,7 +55,7 @@ jobs:
           if [ "$REF_TYPE" = "tag" ]; then
             name="$REF_NAME"
           else
-            name="${INPUT_BUILD_NAME:-EXProton-11.0-2e-1}"
+            name="${INPUT_BUILD_NAME:-EX-Proton11-1}"
           fi
           if ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
             echo "Invalid build name: '$name' (allowed: A-Z a-z 0-9 . _ -)" >&2
@@ -84,6 +82,10 @@ jobs:
             /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/share/az*
             /usr/local/.ghcup
 
+      # Same host packages as Proton-GE's CI.
+      - name: Prepare host
+        run: sudo apt-get update && sudo apt-get install -y ccache fontforge-nox
+
       - name: Disk usage before build
         run: df -h
 
@@ -98,17 +100,31 @@ jobs:
         uses: actions/cache/restore@v4.3.0
         with:
           path: ~/.ccache
-          key: ccache-exproton-${{ runner.os }}-${{ github.run_id }}
+          key: ccache-ex-proton-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            ccache-exproton-${{ runner.os }}-
+            ccache-ex-proton-${{ runner.os }}-
 
-      - name: Prepare Proton tree (submodules, overrides, patches)
+      - name: Prepare Proton tree (submodules, overrides, GE patches, our patches)
         run: ./scripts/prepare.sh --jobs "$(nproc)"
 
+      - name: Upload prepare log
+        if: always()
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: prepare-ge-log
+          path: |
+            prepare-ge.log
+            prepare-ge.rejects
+          if-no-files-found: ignore
+
       # CI only: build without debug info (-ggdb -> -s) so the build fits on a
-      # hosted runner's disk. Same idea as Proton-GE's CI strip patch.
+      # hosted runner's disk. This is Proton-GE's own CI patch, applied the way
+      # GE's CI applies it (patch -Np1; it needs fuzz, so `git apply` rejects it).
       - name: Strip binaries early (CI disk saving)
-        run: git -C proton apply --verbose ../.github/patches/0001-build-strip-binaries-early.patch
+        working-directory: ./proton
+        run: |
+          patch -Np1 -i ./.github/patches/0001-build-strip-binaries-early.patch
+          grep -n '^CFLAGS += -s ' Makefile.in
 
       - name: Configure
         shell: bash
@@ -118,11 +134,13 @@ jobs:
           set -euo pipefail
           mkdir build
           cd build
-          # The SDK image comes from Proton's Makefile.in default (steamrt4);
-          # it is intentionally not passed via --proton-sdk-image.
-          ../proton/configure.sh --enable-ccache --container-engine=docker --build-name="$BUILD_NAME"
+          # The SDK image comes from the Proton tree's Makefile.in default
+          # (steamrt4); it is intentionally not overridden here.
+          ../proton/configure.sh --container-engine=docker --build-name="$BUILD_NAME"
           make --silent get-steamrt-image || true
 
+      # Proton-GE's `make redist` creates <name>.tar.gz and <name>.sha512sum in
+      # the build directory itself.
       - name: Make redist
         working-directory: ./build
         run: |
@@ -140,25 +158,16 @@ jobs:
           path: ~/.ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
-      # Proton's `make redist` only rsyncs the dist tree into build/redist/ (Makefile.in,
-      # redist target); it does not create a tarball, so we do it here. The top-level
-      # directory inside the tarball is the build name so it extracts straight into
-      # compatibilitytools.d/.
-      - name: Package tarball
+      - name: Check tarball
         shell: bash
         env:
           BUILD_NAME: ${{ steps.name.outputs.name }}
         run: |
           set -euo pipefail
           cd build
-          test -f redist/compatibilitytool.vdf
-          test -f redist/LICENSE
-          tar --owner=0 --group=0 --numeric-owner --transform "s,^redist,${BUILD_NAME}," \
-              -czf "${BUILD_NAME}.tar.gz" redist
-          sha512sum "${BUILD_NAME}.tar.gz" > "${BUILD_NAME}.sha512sum"
           ls -lh "${BUILD_NAME}.tar.gz" "${BUILD_NAME}.sha512sum"
-          cat "${BUILD_NAME}.sha512sum"
-          df -h
+          sha512sum -c "${BUILD_NAME}.sha512sum"
+          tar -tzf "${BUILD_NAME}.tar.gz" | grep -m1 "^${BUILD_NAME}/compatibilitytool.vdf$"
 
       - name: Upload tarball
         uses: actions/upload-artifact@v5.0.0
@@ -213,5 +222,5 @@ jobs:
           else
             gh release create "$TAG" "dist/${TAG}.tar.gz" "dist/${TAG}.sha512sum" \
               --verify-tag --title "$TAG" \
-              --notes "EXProton build $TAG. Untested community build; see README.md and PATCHES.md."
+              --notes "EX-Proton build $TAG. Community build; see README.md and PATCHES.md."
           fi
