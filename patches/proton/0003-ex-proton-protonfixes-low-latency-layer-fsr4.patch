@@ -23,26 +23,41 @@ index 37db79c69..5ff5dfdfe 100644
  ##
 diff --git a/extras/build-low_latency_layer.mk b/extras/build-low_latency_layer.mk
 new file mode 100644
-index 000000000..ff1ac3fc5
+index 000000000..567e50a15
 --- /dev/null
 +++ b/extras/build-low_latency_layer.mk
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,66 @@
 +##
 +## low_latency_layer (EX-Proton)
 +##
 +## Vulkan layer from Korthos-Software/low_latency_layer, enabled at run time
 +## with LOW_LATENCY_LAYER=1. Build rules follow Proton-GE's
 +## vklayers/build-low_latency_layer.mk and build-vulkan-utility-libraries.mk.
-+## Only built when both source trees are present (scripts/prepare.sh clones
++## Only built when the source trees are present (scripts/prepare.sh clones
 +## them from extras.conf).
++##
++## Vulkan-Utility-Libraries needs newer Vulkan headers than the base's
++## Vulkan-Headers pin, so the layer is built against its own copy
++## (extras/Vulkan-Headers-layer); the base's headers are left alone.
 +
 +ifneq ($(wildcard $(SRC)/extras/low_latency_layer/CMakeLists.txt),)
 +ifneq ($(wildcard $(SRC)/extras/Vulkan-Utility-Libraries/CMakeLists.txt),)
++ifneq ($(wildcard $(SRC)/extras/Vulkan-Headers-layer/CMakeLists.txt),)
++
++$(eval $(call rules-source,vulkan-headers-layer,$(SRCDIR)/extras/Vulkan-Headers-layer))
++$(eval $(call rules-cmake,vulkan-headers-layer,x86_64,unix))
++$(eval $(call rules-cmake,vulkan-headers-layer,aarch64,unix))
++
++## Build-time only; it is not shipped.
++$(OBJ)/.vulkan-headers-layer-x86_64-dist:
++	touch $@
++$(OBJ)/.vulkan-headers-layer-aarch64-dist:
++	touch $@
 +
 +VULKAN_UTILITY_LIBRARIES_CMAKE_ARGS = \
 +  -DCMAKE_BUILD_TYPE=release
 +
-+VULKAN_UTILITY_LIBRARIES_DEPENDS = vulkan-headers
++VULKAN_UTILITY_LIBRARIES_DEPENDS = vulkan-headers-layer
 +
 +$(eval $(call rules-source,vulkan-utility-libraries,$(SRCDIR)/extras/Vulkan-Utility-Libraries))
 +$(eval $(call rules-cmake,vulkan-utility-libraries,x86_64,unix))
@@ -57,7 +72,7 @@ index 000000000..ff1ac3fc5
 +LOW_LATENCY_LAYER_CMAKE_ARGS = \
 +  -DCMAKE_BUILD_TYPE=release
 +
-+LOW_LATENCY_LAYER_DEPENDS = vulkan-headers vulkan-utility-libraries
++LOW_LATENCY_LAYER_DEPENDS = vulkan-headers-layer vulkan-utility-libraries
 +
 +$(eval $(call rules-source,low_latency_layer,$(SRCDIR)/extras/low_latency_layer))
 +$(eval $(call rules-cmake,low_latency_layer,x86_64,unix))
@@ -75,6 +90,7 @@ index 000000000..ff1ac3fc5
 +
 +all-dist: low_latency_layer
 +
++endif # extras/Vulkan-Headers-layer present
 +endif # extras/Vulkan-Utility-Libraries present
 +endif # extras/low_latency_layer present
 diff --git a/extras/build-protonfixes.mk b/extras/build-protonfixes.mk

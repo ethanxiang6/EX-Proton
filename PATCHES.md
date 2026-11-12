@@ -31,6 +31,7 @@ set for a game.
 
 | `extras/low_latency_layer` | https://github.com/Korthos-Software/low_latency_layer `4e7fe12b797d89be07919acf3d2df5cda3f4d89f` (Proton-GE's pin). MIT. | `LOW_LATENCY_LAYER=1` | Vulkan implicit layer. `patches/extras__low_latency_layer/0001-use-relative-library-path.patch` is Proton-GE's patch for it. |
 | `extras/Vulkan-Utility-Libraries` | https://github.com/KhronosGroup/Vulkan-Utility-Libraries `b538fb5b08513aa78346cd414ad5e576a2a3e920` (Proton-GE's pin). Apache-2.0. | build-time only | Needed to build the layer; not shipped. |
+| `extras/Vulkan-Headers-layer` | https://github.com/KhronosGroup/Vulkan-Headers `36872f9062b17b1a30b8ed1d81ca5ea6bb608a72` (Proton-GE's pin). Apache-2.0 / MIT. | build-time only | Newer headers than the base pins, used only to build the layer. |
 | `extras/protonfixes` | https://github.com/open-wine-components/umu-protonfixes `28a02c25e4b895131c9ebdeda411ec3646b38151` (Proton-GE's pin, without GE's three patches to it). BSD-2-Clause. | always on (`PROTONFIXES_DISABLE=1` disables) | Per-game fixes, bundled winetricks. With `PROTON_FSR4_UPGRADE=1` it downloads AMD's `amdxcffx64.dll` at run time (URL list from `loathingkernel.github.io/proton-upscalers`) and sets `FSR4_UPGRADE=1` for the base Wine's own `amdxc64`. Its DLSS / XeSS / OptiScaler upgrades need Wine patches this build does not have and are not wired up. |
 
 Latency benefits are the fork author's claims; nothing has been measured here.
