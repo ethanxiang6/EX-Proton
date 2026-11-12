@@ -1,9 +1,9 @@
 # EX-Proton build workflow.
 #
-# Follows GloriousEggroll/proton-ge-custom .github/workflows/_job_build.yml
-# (free disk space, host ccache + fontforge, ccache cache, GE patch step, CI
-# strip patch, build in ./build, artifact upload), adapted to this overlay repo
-# where Proton-GE is the `proton` submodule.
+# Builds the pinned upstream Proton tree (Valve Proton Experimental, the
+# `proton` submodule) with this repository's extras and patches, in Valve's
+# Steam Runtime SDK container: free disk space, ccache cache, prepare, CI strip
+# patch, build in ./build, package, artifact upload.
 #
 # Third-party actions (not published by GitHub/"actions"):
 #   - endersonmenezes/free-disk-space  (pinned to a full version tag)
@@ -82,10 +82,6 @@ jobs:
             /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle /usr/share/az*
             /usr/local/.ghcup
 
-      # Same host packages as Proton-GE's CI.
-      - name: Prepare host
-        run: sudo apt-get update && sudo apt-get install -y ccache fontforge-nox
-
       - name: Disk usage before build
         run: df -h
 
@@ -104,27 +100,15 @@ jobs:
           restore-keys: |
             ccache-ex-proton-${{ runner.os }}-
 
-      - name: Prepare Proton tree (submodules, overrides, GE patches, our patches)
+      - name: Prepare Proton tree (submodules, overrides, extras, patches)
         run: ./scripts/prepare.sh --jobs "$(nproc)"
 
-      - name: Upload prepare log
-        if: always()
-        uses: actions/upload-artifact@v5.0.0
-        with:
-          name: prepare-ge-log
-          path: |
-            prepare-ge.log
-            prepare-ge.rejects
-          if-no-files-found: ignore
-
       # CI only: build without debug info (-ggdb -> -s) so the build fits on a
-      # hosted runner's disk. This is Proton-GE's own CI patch, applied the way
-      # GE's CI applies it (patch -Np1; it needs fuzz, so `git apply` rejects it).
+      # hosted runner's disk.
       - name: Strip binaries early (CI disk saving)
-        working-directory: ./proton
         run: |
-          patch -Np1 -i ./.github/patches/0001-build-strip-binaries-early.patch
-          grep -n '^CFLAGS += -s ' Makefile.in
+          git -C proton apply --verbose ../.github/patches/0001-build-strip-binaries-early.patch
+          grep -n '^CFLAGS += -s ' proton/Makefile.in
 
       - name: Configure
         shell: bash
@@ -136,11 +120,11 @@ jobs:
           cd build
           # The SDK image comes from the Proton tree's Makefile.in default
           # (steamrt4); it is intentionally not overridden here.
-          ../proton/configure.sh --container-engine=docker --build-name="$BUILD_NAME"
+          ../proton/configure.sh --enable-ccache --container-engine=docker --build-name="$BUILD_NAME"
           make --silent get-steamrt-image || true
 
-      # Proton-GE's `make redist` creates <name>.tar.gz and <name>.sha512sum in
-      # the build directory itself.
+      # Valve's `make redist` only rsyncs the dist tree into build/redist/; the
+      # tarball is created in the "Package tarball" step below.
       - name: Make redist
         working-directory: ./build
         run: |
@@ -158,20 +142,28 @@ jobs:
           path: ~/.ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
-      - name: Check tarball
+      # The top-level directory inside the tarball is the build name, so it
+      # extracts straight into compatibilitytools.d/.
+      - name: Package tarball
         shell: bash
         env:
           BUILD_NAME: ${{ steps.name.outputs.name }}
         run: |
           set -euo pipefail
           cd build
+          test -f redist/compatibilitytool.vdf
+          test -x redist/proton
+          test -f redist/LICENSE
+          cat redist/version
+          tar --owner=0 --group=0 --numeric-owner --transform "s,^redist,${BUILD_NAME},"               -czf "${BUILD_NAME}.tar.gz" redist
+          sha512sum "${BUILD_NAME}.tar.gz" > "${BUILD_NAME}.sha512sum"
           ls -lh "${BUILD_NAME}.tar.gz" "${BUILD_NAME}.sha512sum"
-          sha512sum -c "${BUILD_NAME}.sha512sum"
           # List to a file first: piping tar into `grep -m1` makes tar fail with
           # SIGPIPE under pipefail.
           tar -tzf "${BUILD_NAME}.tar.gz" > tarball-contents.txt
           grep -x "${BUILD_NAME}/compatibilitytool.vdf" tarball-contents.txt
           grep -c "/lib/wine/dxvk-low-latency/\|/lib/wine/vkd3d-low-latency/" tarball-contents.txt || true
+          df -h
 
       - name: Upload tarball
         uses: actions/upload-artifact@v5.0.0

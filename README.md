@@ -6,10 +6,11 @@ component overrides, patches and a CI build on top of it. The upstream tree is
 never edited in this repository; everything is applied at build time by
 `scripts/prepare.sh`.
 
-The current base is [Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom)
-at tag `GE-Proton11-12`, which itself is Valve's Proton (bleeding-edge Wine)
-plus wine-staging and GE's patch set, including its Media Foundation / video
-playback rework and full FFmpeg codec build.
+The current base is Valve's [Proton Experimental](https://github.com/ValveSoftware/Proton)
+at tag `experimental-11.0-20261105c`. Video playback is Valve's own
+(winegstreamer + GStreamer), unchanged. EX-Proton adds a small set of Wine
+latency / performance patches and optional low-latency DXVK and vkd3d-proton
+builds on top.
 
 ## Goals
 
@@ -22,9 +23,8 @@ These are goals, not results:
 
 ## Status
 
-Nothing has been benchmarked, and no build has been tested in a game yet. See
-the Actions tab for whether the latest build compiled. Do not assume any goal
-above has been met.
+Nothing has been benchmarked. See the Actions tab for whether the latest build
+compiled. Do not assume any goal above has been met.
 
 ## Versioning
 
@@ -48,7 +48,7 @@ patches/<component>/*.patch  our patches, applied in lexicographic order with gi
                              (patches/proton/ applies at the root of the proton checkout;
                              any other directory applies inside proton/<component>)
 PATCHES.md                   what is integrated and where it comes from
-scripts/prepare.sh           submodules -> overrides -> Proton-GE's patch script -> our patches
+scripts/prepare.sh           submodules -> overrides -> extras -> our patches
 .github/workflows/build.yml  CI build and release workflow
 ```
 
@@ -68,11 +68,12 @@ scripts/prepare.sh           submodules -> overrides -> Proton-GE's patch script
 git clone https://github.com/ethanxiang6/EX-Proton.git && cd EX-Proton
 scripts/prepare.sh --jobs "$(nproc)"      # downloads many submodules; needs git, bash, patch, wget
 mkdir build && cd build
-../proton/configure.sh --container-engine=docker --build-name=EX-Proton11-1
+../proton/configure.sh --enable-ccache --container-engine=docker --build-name=EX-Proton11-1
 make -j"$(nproc)" redist
+tar --transform 's,^redist,EX-Proton11-1,' -czf EX-Proton11-1.tar.gz redist
 ```
 
-`make redist` writes `EX-Proton11-1.tar.gz` and a checksum into `build/`.
+`make redist` writes the build into `build/redist/`; the last line packages it.
 `scripts/prepare.sh` refuses to run on a `proton` tree that already has local
 modifications; use a fresh clone.
 
@@ -91,9 +92,10 @@ modifications; use a fresh clone.
 ## Options added by EX-Proton
 
 Set these per game in Steam's launch options, for example
-`PROTON_DXVK_LOWLATENCY=1 %command%`. Everything the base provides
-(`PROTON_ENABLE_WAYLAND`, `LOW_LATENCY_LAYER`, `PROTON_FSR4_UPGRADE`, ...) is
-documented in `proton/README.md`.
+`PROTON_DXVK_LOWLATENCY=1 %command%`. Everything the base provides is
+documented in `proton/README.md`. Options that exist only in Proton-GE (for
+example `LOW_LATENCY_LAYER`, `PROTON_FSR4_UPGRADE`, `WINE_FULLSCREEN_FSR`) do
+not exist in this build.
 
 | Variable | Effect |
 |---|---|
@@ -113,7 +115,7 @@ their limits.
 ## Credits and links
 
 - [Valve Proton](https://github.com/ValveSoftware/Proton)
-- [Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom), the current base
+- [Proton-GE](https://github.com/GloriousEggroll/proton-ge-custom), source of the Wine patches and an earlier base
 - [proton-cachyos](https://github.com/CachyOS/proton-cachyos)
 - Proton-EM and DW-Proton, reviewed for changes worth carrying (see PATCHES.md)
 

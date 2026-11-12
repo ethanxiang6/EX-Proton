@@ -7,10 +7,10 @@ nothing in this overlay build, so the launcher reported the build as
 Written for EX-Proton.
 
 diff --git a/Makefile.in b/Makefile.in
-index e4039398d..3bcc81f10 100644
+index ef0a228..69dd8e6 100644
 --- a/Makefile.in
 +++ b/Makefile.in
-@@ -1846,7 +1846,7 @@ $(DIST_COPY_TARGETS): | $(DST_DIR)
+@@ -1491,7 +1491,7 @@ $(DIST_COPY_TARGETS): | $(DST_DIR)
  all-dist: $(DIST_COPY_TARGETS)
  
  all-dist:

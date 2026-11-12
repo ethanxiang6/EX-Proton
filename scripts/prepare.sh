@@ -3,9 +3,9 @@
 # EX-Proton overlay preparation.
 #
 # Turns a fresh checkout of this repo into a buildable Proton tree:
-#   1. init the pinned Proton-GE submodule (./proton) and its nested submodules
+#   1. init the pinned upstream Proton submodule (./proton) and its nested submodules
 #   2. apply overrides.conf   (<path-inside-proton> <git-url> <40-char-sha>)
-#   3. run Proton-GE's own patch script (patches/protonprep-valve-staging.sh)
+#   3. run Proton-GE's own patch script if the base has one (Proton-GE only)
 #   4. apply patches/<component>/*.patch with `git apply` (patches/proton/ applies
 #      at the proton root; any other directory applies in proton/<component>)
 #
@@ -63,7 +63,6 @@ git submodule update --init proton
 check_clean "after top-level init"
 
 info "initialising nested submodules (jobs=$JOBS); this downloads a lot"
-# --filter=tree:0 is what Proton-GE's own CI uses for this tree.
 git -C "$PROTON" submodule update --init --filter=tree:0 --recursive --jobs "$JOBS"
 
 # --- 2. overrides -----------------------------------------------------------
@@ -155,31 +154,34 @@ else
     info "no extras.conf; skipping extra source trees"
 fi
 
-# --- 3. Proton-GE's own patch step -------------------------------------------
+# --- 3. Proton-GE's own patch step (only when the base is Proton-GE) ----------
 # GE applies its patch set to the submodules with this script (it resets each
 # submodule to HEAD first, which is why overrides run before it). GE's CI runs
 # it with `|| true`; here a rejected hunk is treated as an error unless
 # EXPROTON_ALLOW_PREP_REJECTS=1, because an override can make GE's patches for
 # that component stop applying.
 GE_PREP="$PROTON/patches/protonprep-valve-staging.sh"
-[ -f "$GE_PREP" ] || die "GE prep script not found at $GE_PREP (is the proton submodule Proton-GE?)"
-PREP_LOG="$ROOT/prepare-ge.log"
-info "running Proton-GE prep script (log: $PREP_LOG)"
-prep_status=0
-( cd "$PROTON" && bash ./patches/protonprep-valve-staging.sh ) >"$PREP_LOG" 2>&1 || prep_status=$?
-tail -n 15 "$PREP_LOG"
-info "GE prep script exit status: $prep_status"
-if grep -nE "FAILED|can't find file to patch""$PREP_LOG" >"$ROOT/prepare-ge.rejects" 2>/dev/null; then
-    echo "prepare.sh: GE prep script reported problems:" >&2
-    head -n 60 "$ROOT/prepare-ge.rejects" >&2
-    if [ "${EXPROTON_ALLOW_PREP_REJECTS:-0}" != "1" ]; then
-        die "GE patches did not apply cleanly (set EXPROTON_ALLOW_PREP_REJECTS=1 to continue anyway)"
+if [ -f "$GE_PREP" ]; then
+    PREP_LOG="$ROOT/prepare-ge.log"
+    info "running Proton-GE prep script (log: $PREP_LOG)"
+    prep_status=0
+    ( cd "$PROTON" && bash ./patches/protonprep-valve-staging.sh ) >"$PREP_LOG" 2>&1 || prep_status=$?
+    tail -n 15 "$PREP_LOG"
+    info "GE prep script exit status: $prep_status"
+    if grep -nE "FAILED|can't find file to patch" "$PREP_LOG" >"$ROOT/prepare-ge.rejects" 2>/dev/null; then
+        echo "prepare.sh: GE prep script reported problems:" >&2
+        head -n 60 "$ROOT/prepare-ge.rejects" >&2
+        if [ "${EXPROTON_ALLOW_PREP_REJECTS:-0}" != "1" ]; then
+            die "GE patches did not apply cleanly (set EXPROTON_ALLOW_PREP_REJECTS=1 to continue anyway)"
+        fi
     fi
-fi
-rejs="$(find "$PROTON" -name '*.rej' -not -path '*/.git/*' | head -n 20)"
-if [ -n "$rejs" ] && [ "${EXPROTON_ALLOW_PREP_REJECTS:-0}" != "1" ]; then
-    echo "$rejs" >&2
-    die "GE prep left .rej files behind"
+    rejs="$(find "$PROTON" -name '*.rej' -not -path '*/.git/*' | head -n 20)"
+    if [ -n "$rejs" ] && [ "${EXPROTON_ALLOW_PREP_REJECTS:-0}" != "1" ]; then
+        echo "$rejs" >&2
+        die "GE prep left .rej files behind"
+    fi
+else
+    info "base tree has no Proton-GE prep script; skipping (Valve base)"
 fi
 
 # --- 4. our patches ---------------------------------------------------------
