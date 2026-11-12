@@ -53,10 +53,14 @@ jobs:
           set -euo pipefail
           mkdir -p dl/ex dl/ge t/ex t/ge out
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n "${BUILD_NAME}.tar.gz" -D dl/ex
-          gh release download "$GE_TAG" -R GloriousEggroll/proton-ge-custom -p "${GE_TAG}.tar.gz" -D dl/ge
+          gh release download "$GE_TAG" -R GloriousEggroll/proton-ge-custom -p "${GE_TAG}-x86_64.tar.gz" -D dl/ge
           ls -l dl/ex dl/ge
           tar -xzf "dl/ex/${BUILD_NAME}.tar.gz" -C t/ex
-          tar -xzf "dl/ge/${GE_TAG}.tar.gz" -C t/ge
+          tar -xzf "dl/ge/${GE_TAG}-x86_64.tar.gz" -C t/ge
+          ls -la t/ex t/ge
+          # Normalise the top-level directory names for the later steps.
+          mv t/ex/* t/ex/tool
+          mv t/ge/* t/ge/tool
           rm -rf dl
           df -h .
 
@@ -64,7 +68,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          ex="t/ex/$BUILD_NAME"; ge="t/ge/$GE_TAG"
+          ex="t/ex/tool"; ge="t/ge/tool"
           ls -la "$ex" "$ge"
           ( cd "$ex" && find . -printf '%M %y %P\n' | LC_ALL=C sort ) > out/ex-files.txt
           ( cd "$ge" && find . -printf '%M %y %P\n' | LC_ALL=C sort ) > out/ge-files.txt
@@ -115,7 +119,7 @@ jobs:
           EOF
           chmod +x t/smoke.sh
           status=0
-          for pair in "ge/$GE_TAG ge" "ex/$BUILD_NAME ex"; do
+          for pair in "ge/tool ge" "ex/tool ex"; do
             set -- $pair
             echo "::group::smoke $2"
             docker run --rm --init -v "$PWD/t:/t" -v "$PWD/out:/out" "$SDK_IMAGE" \
