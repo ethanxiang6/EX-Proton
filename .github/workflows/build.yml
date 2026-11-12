@@ -163,6 +163,8 @@ jobs:
           tar -tzf "${BUILD_NAME}.tar.gz" > tarball-contents.txt
           grep -x "${BUILD_NAME}/compatibilitytool.vdf" tarball-contents.txt
           grep -c "/lib/wine/dxvk-low-latency/\|/lib/wine/vkd3d-low-latency/" tarball-contents.txt || true
+          grep -c "^${BUILD_NAME}/protonfixes/" tarball-contents.txt || true
+          grep "low_latency_layer.json\|libVkLayer_KORTHOS" tarball-contents.txt || true
           df -h
 
       - name: Upload tarball

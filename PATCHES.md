@@ -29,6 +29,10 @@ set for a game.
 | `extras/dxvk-low-latency` | https://github.com/netborg-afps/dxvk-low-latency `d533db09df35453ed1baa1b0c7d86de2b67bf504` (release "3.1.1-low-latency"). Zlib. | `PROTON_DXVK_LOWLATENCY=1` | D3D8-11. Low-latency frame pacing is this fork's default mode. Also sets `dxvk.numCompilerThreads` to leave two cores free (one on 3-4 core machines), as proton-cachyos does. |
 | `extras/vkd3d-low-latency` | https://github.com/netborg-afps/vkd3d-low-latency `f4e0518cdd35fee0629e25367422bcbc17cbc122`. LGPL-2.1. | `PROTON_VKD3D_LOWLATENCY=1` | D3D12. Its README lists Intel GPUs, AMD Anti-Lag 2 and frame generation as unsupported. |
 
+| `extras/low_latency_layer` | https://github.com/Korthos-Software/low_latency_layer `4e7fe12b797d89be07919acf3d2df5cda3f4d89f` (Proton-GE's pin). MIT. | `LOW_LATENCY_LAYER=1` | Vulkan implicit layer. `patches/extras__low_latency_layer/0001-use-relative-library-path.patch` is Proton-GE's patch for it. |
+| `extras/Vulkan-Utility-Libraries` | https://github.com/KhronosGroup/Vulkan-Utility-Libraries `b538fb5b08513aa78346cd414ad5e576a2a3e920` (Proton-GE's pin). Apache-2.0. | build-time only | Needed to build the layer; not shipped. |
+| `extras/protonfixes` | https://github.com/open-wine-components/umu-protonfixes `28a02c25e4b895131c9ebdeda411ec3646b38151` (Proton-GE's pin, without GE's three patches to it). BSD-2-Clause. | always on (`PROTONFIXES_DISABLE=1` disables) | Per-game fixes, bundled winetricks. With `PROTON_FSR4_UPGRADE=1` it downloads AMD's `amdxcffx64.dll` at run time (URL list from `loathingkernel.github.io/proton-upscalers`) and sets `FSR4_UPGRADE=1` for the base Wine's own `amdxc64`. Its DLSS / XeSS / OptiScaler upgrades need Wine patches this build does not have and are not wired up. |
+
 Latency benefits are the fork author's claims; nothing has been measured here.
 
 ## Patches (`patches/`)
@@ -53,12 +57,14 @@ to the Wine pin above, in this order. Apply-checked; CI is the compile check.
 |---|---|---|
 | `patches/proton/0001-ex-proton-optional-low-latency-dxvk-and-vkd3d-builds.patch` | Build rules for the two extra trees (`extras/build-*.mk`, mirroring the stock DXVK / vkd3d-proton rules) and the launcher-script switches. | this repository |
 | `patches/proton/0002-ex-proton-write-build-name-into-version-file.patch` | Writes the build name into the `version` file (the base's `git describe` yields nothing in this overlay build). | this repository |
+| `patches/proton/0003-ex-proton-protonfixes-low-latency-layer-fsr4.patch` | Build rules for protonfixes and the low-latency layer (following Proton-GE's) and the launcher hooks for them and `PROTON_FSR4_UPGRADE`. A protonfixes error is logged and never stops the launch. | this repository |
 
 ## Reviewed and not taken
 
 | Item | From | Why not |
 |---|---|---|
-| `VK_NV_low_latency2` (Reflex) Wine patch, FSR fullscreen upscaling patch | Proton-GE | Do not apply to Valve's Wine; adapting them would be a rewrite. |
+| `VK_NV_low_latency2` (Reflex) Wine patch, FSR fullscreen upscaling patch | Proton-GE | Do not apply to Valve's Wine; adapting them would be a rewrite. gamescope provides FSR upscaling outside Wine. |
+| Wayland driver HDR (`PROTON_ENABLE_WAYLAND` / `PROTON_ENABLE_HDR`) | Proton-GE / Proton-EM | About 300 Wine patches written against GE's tree. On this base HDR goes through gamescope with `DXVK_HDR=1`. |
 | ntdll futex-queue patches (adaptive spinlock, 1024 queues, hashed queue selection) | proton-cachyos | Carried in the first GE-based build, which did not start a game; the build started one after they were removed. Cause not otherwise confirmed. |
 | Replacing the stock DXVK / vkd3d-proton outright with the low-latency forks | proton-cachyos | Would change frame pacing for every game. Taken as opt-in extras instead. |
 | `-O3 -mno-avx` and other compiler flag changes | proton-cachyos | No measured benefit in any source. |

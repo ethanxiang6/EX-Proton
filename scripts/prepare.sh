@@ -7,7 +7,8 @@
 #   2. apply overrides.conf   (<path-inside-proton> <git-url> <40-char-sha>)
 #   3. run Proton-GE's own patch script if the base has one (Proton-GE only)
 #   4. apply patches/<component>/*.patch with `git apply` (patches/proton/ applies
-#      at the proton root; any other directory applies in proton/<component>)
+#      at the proton root; any other directory applies in proton/<component>,
+#      with "__" in the directory name standing for "/")
 #
 # Usage: scripts/prepare.sh [--jobs N]
 #   --jobs N   parallel submodule clones (default: $EXPROTON_JOBS, else nproc, else 4)
@@ -190,10 +191,12 @@ if [ -d "$ROOT/patches" ]; then
     for pdir in "$ROOT"/patches/*/; do
         [ -d "$pdir" ] || continue
         component="$(basename "$pdir")"
+        # "__" in the directory name stands for "/" (patches/extras__foo applies
+        # in proton/extras/foo).
         if [ "$component" = "proton" ]; then
             target="$PROTON"
         else
-            target="$PROTON/$component"
+            target="$PROTON/${component//__//}"
         fi
 
         mapfile -t patches < <(find "$pdir" -maxdepth 1 -type f -name '*.patch' | LC_ALL=C sort)

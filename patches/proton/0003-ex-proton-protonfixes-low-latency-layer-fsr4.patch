@@ -1,0 +1,193 @@
+EX-Proton: protonfixes, Vulkan low-latency layer and PROTON_FSR4_UPGRADE.
+
+Adds build rules for umu-protonfixes and Korthos low_latency_layer (both
+following Proton-GE's rules, built only when scripts/prepare.sh cloned the
+sources) and the launcher hooks: protonfixes is imported and run like in
+Proton-GE, LOW_LATENCY_LAYER=1 enables the layer, and PROTON_FSR4_UPGRADE=1
+has protonfixes fetch the FSR4 DLL for Wine's existing amdxc64 upgrade path.
+
+Written for EX-Proton; applies after 0001 and 0002.
+
+diff --git a/Makefile.in b/Makefile.in
+index 37db79c69..5ff5dfdfe 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -872,6 +872,8 @@ $(OBJ)/.vkd3d-proton-post-source:
+ ##
+ include $(SRC)/extras/build-dxvk-low-latency.mk
+ include $(SRC)/extras/build-vkd3d-low-latency.mk
++include $(SRC)/extras/build-low_latency_layer.mk
++include $(SRC)/extras/build-protonfixes.mk
+ 
+ 
+ ##
+diff --git a/extras/build-low_latency_layer.mk b/extras/build-low_latency_layer.mk
+new file mode 100644
+index 000000000..ff1ac3fc5
+--- /dev/null
++++ b/extras/build-low_latency_layer.mk
+@@ -0,0 +1,50 @@
++##
++## low_latency_layer (EX-Proton)
++##
++## Vulkan layer from Korthos-Software/low_latency_layer, enabled at run time
++## with LOW_LATENCY_LAYER=1. Build rules follow Proton-GE's
++## vklayers/build-low_latency_layer.mk and build-vulkan-utility-libraries.mk.
++## Only built when both source trees are present (scripts/prepare.sh clones
++## them from extras.conf).
++
++ifneq ($(wildcard $(SRC)/extras/low_latency_layer/CMakeLists.txt),)
++ifneq ($(wildcard $(SRC)/extras/Vulkan-Utility-Libraries/CMakeLists.txt),)
++
++VULKAN_UTILITY_LIBRARIES_CMAKE_ARGS = \
++  -DCMAKE_BUILD_TYPE=release
++
++VULKAN_UTILITY_LIBRARIES_DEPENDS = vulkan-headers
++
++$(eval $(call rules-source,vulkan-utility-libraries,$(SRCDIR)/extras/Vulkan-Utility-Libraries))
++$(eval $(call rules-cmake,vulkan-utility-libraries,x86_64,unix))
++$(eval $(call rules-cmake,vulkan-utility-libraries,aarch64,unix))
++
++## Only used to build low_latency_layer; it is not shipped.
++$(OBJ)/.vulkan-utility-libraries-x86_64-dist:
++	touch $@
++$(OBJ)/.vulkan-utility-libraries-aarch64-dist:
++	touch $@
++
++LOW_LATENCY_LAYER_CMAKE_ARGS = \
++  -DCMAKE_BUILD_TYPE=release
++
++LOW_LATENCY_LAYER_DEPENDS = vulkan-headers vulkan-utility-libraries
++
++$(eval $(call rules-source,low_latency_layer,$(SRCDIR)/extras/low_latency_layer))
++$(eval $(call rules-cmake,low_latency_layer,x86_64,unix))
++$(eval $(call rules-cmake,low_latency_layer,aarch64,unix))
++
++$(OBJ)/.low_latency_layer-x86_64-post-build:
++	mkdir -p $(DST_DIR)/share/low_latency_layer/implicit_layer.d/
++	cp -a $(LOW_LATENCY_LAYER_x86_64_DST)/share/vulkan/implicit_layer.d/low_latency_layer.json $(DST_DIR)/share/low_latency_layer/implicit_layer.d/
++	touch $@
++
++$(OBJ)/.low_latency_layer-aarch64-post-build:
++	mkdir -p $(DST_DIR)/share/low_latency_layer/implicit_layer.d/
++	cp -a $(LOW_LATENCY_LAYER_aarch64_DST)/share/vulkan/implicit_layer.d/low_latency_layer.json $(DST_DIR)/share/low_latency_layer/implicit_layer.d/
++	touch $@
++
++all-dist: low_latency_layer
++
++endif # extras/Vulkan-Utility-Libraries present
++endif # extras/low_latency_layer present
+diff --git a/extras/build-protonfixes.mk b/extras/build-protonfixes.mk
+new file mode 100644
+index 000000000..47c23cc54
+--- /dev/null
++++ b/extras/build-protonfixes.mk
+@@ -0,0 +1,44 @@
++##
++## protonfixes (EX-Proton)
++##
++## open-wine-components/umu-protonfixes: per-game fixes and the upscaler
++## (FSR4) download helper, installed as <build>/protonfixes and imported by
++## the launcher script. Build rules follow Proton-GE's Makefile.in.
++## Only built when the source tree is present (scripts/prepare.sh clones it
++## from extras.conf).
++
++ifneq ($(wildcard $(SRC)/extras/protonfixes/Makefile),)
++
++$(eval $(call rules-source,protonfixes,$(SRCDIR)/extras/protonfixes))
++$(eval $(call rules-common,protonfixes,x86_64,unix))
++$(eval $(call rules-common,protonfixes,aarch64,unix))
++
++$(OBJ)/.protonfixes-x86_64-build:
++	cd $(PROTONFIXES_SRC) && \
++	env $(PROTONFIXES_x86_64_ENV) BUILD=$(PROTONFIXES_x86_64_OBJ) TARGET_ARCH=$(TARGET_ARCH) make
++	cd $(PROTONFIXES_SRC) && \
++	env $(PROTONFIXES_x86_64_ENV) BUILD=$(PROTONFIXES_x86_64_OBJ) DIST=$(PROTONFIXES_x86_64_DST) TARGET_ARCH=$(TARGET_ARCH) make install
++	touch $@
++
++$(OBJ)/.protonfixes-aarch64-build:
++	cd $(PROTONFIXES_SRC) && \
++	env $(PROTONFIXES_aarch64_ENV) BUILD=$(PROTONFIXES_aarch64_OBJ) TARGET_ARCH=$(TARGET_ARCH) make
++	cd $(PROTONFIXES_SRC) && \
++	env $(PROTONFIXES_aarch64_ENV) BUILD=$(PROTONFIXES_aarch64_OBJ) DIST=$(PROTONFIXES_aarch64_DST) TARGET_ARCH=$(TARGET_ARCH) make install
++	touch $@
++
++PROTONFIXES_TARGET := $(addprefix $(DST_BASE)/,protonfixes)
++
++$(OBJ)/.protonfixes-x86_64-dist:
++	mkdir -p $(PROTONFIXES_TARGET)
++	rsync --delete -arx $(PROTONFIXES_x86_64_DST)/ $(PROTONFIXES_TARGET)
++	touch $@
++
++$(OBJ)/.protonfixes-aarch64-dist:
++	mkdir -p $(PROTONFIXES_TARGET)
++	rsync --delete -arx $(PROTONFIXES_aarch64_DST)/ $(PROTONFIXES_TARGET)
++	touch $@
++
++all-dist: protonfixes
++
++endif # extras/protonfixes present
+diff --git a/proton b/proton
+index fafa6c03b..26d74652d 100755
+--- a/proton
++++ b/proton
+@@ -19,6 +19,14 @@ import uuid
+ import json
+ import time
+ 
++# EX-Proton: umu-protonfixes (per-game fixes, upscaler downloads) when this
++# build ships it. A problem there must never stop a game from starting.
++try:
++    import protonfixes
++except Exception as e:
++    sys.stderr.write("Proton: protonfixes not available: " + repr(e) + "\n")
++    protonfixes = None
++
+ from ctypes import CDLL
+ from ctypes import CFUNCTYPE
+ from ctypes import POINTER
+@@ -1794,6 +1802,19 @@ class Session:
+         # leave two cores free on machines with more than four.
+         self.check_environment("PROTON_DXVK_LOWLATENCY", "dxvklowlatency")
+         self.check_environment("PROTON_VKD3D_LOWLATENCY", "vkd3dlowlatency")
++
++        # EX-Proton: Vulkan low-latency layer (Korthos low_latency_layer).
++        self.check_environment("LOW_LATENCY_LAYER", "lowlatencylayer")
++        if "lowlatencylayer" in self.compat_config:
++            layer_dir = g_proton.dist_dir + "share/low_latency_layer/implicit_layer.d"
++            if os.path.isdir(layer_dir):
++                append_to_env_str(self.env, "VK_IMPLICIT_LAYER_PATH", layer_dir, ":")
++            else:
++                log("LOW_LATENCY_LAYER set but this build has no low_latency_layer")
++
++        # EX-Proton: PROTON_FSR4_UPGRADE=1 has protonfixes download AMD's FSR4
++        # DLL into the prefix and enables Wine's amdxc64 FSR 3.1 -> FSR4 upgrade.
++        self.check_environment("PROTON_FSR4_UPGRADE", "fsr4")
+         if "dxvklowlatency" in self.compat_config:
+             cpus = os.cpu_count() or 1
+             threads = cpus - (2 if cpus > 4 else (1 if cpus > 2 else 0))
+@@ -2219,6 +2240,24 @@ if __name__ == "__main__":
+ 
+     g_session.init_session(sys.argv[1] != "runinprefix")
+ 
++    # EX-Proton: protonfixes execution (same order as Proton-GE).
++    if protonfixes is not None:
++        try:
++            protonfixes.setup(g_session.env, "PATH", ld_path_var, prepend_to_env_str)
++            protonfixes.setup_mount_drives(setup_dir_drive)
++            protonfixes.winetricks(g_session.env, g_proton.wine_bin, g_proton.wineserver_bin)
++            protonfixes.setup_frame_rate(g_session.env, append_to_env_str)
++            # Only when asked for: without the flag this would switch off the
++            # base's own automatic FSR4 handling.
++            if "fsr4" in g_session.compat_config:
++                protonfixes.setup_upscalers(g_session.compat_config, g_session.env,
++                                            g_compatdata.base_dir, g_compatdata.prefix_dir)
++            protonfixes.execute()
++        except SystemExit:
++            raise
++        except Exception as e:
++            log("protonfixes failed, continuing without it: " + repr(e))
++
+     #determine mode
+     rc = 0
+     if sys.argv[1] == "run":

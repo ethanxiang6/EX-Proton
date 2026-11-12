@@ -102,8 +102,17 @@ not exist in this build.
 | `PROTON_DXVK_LOWLATENCY=1` | Use the low-latency DXVK build (D3D8-11) instead of the stock one. |
 | `PROTON_VKD3D_LOWLATENCY=1` | Use the low-latency vkd3d-proton build (D3D12) instead of the stock one. |
 
-Both are off by default; see [PATCHES.md](PATCHES.md) for what they are and
-their limits.
+| `LOW_LATENCY_LAYER=1` | Load the Korthos Vulkan low-latency layer (same switch as Proton-GE). |
+| `PROTON_FSR4_UPGRADE=1` | Download AMD's FSR4 DLL into the prefix (via protonfixes, from a third-party manifest) and upgrade FSR 3.1 games to FSR4 through Wine's `amdxc64`. |
+
+All are off by default; see [PATCHES.md](PATCHES.md) for what they are and
+their limits. protonfixes (per-game fixes from umu-protonfixes) runs
+automatically; `PROTONFIXES_DISABLE=1` turns it off.
+
+HDR and fullscreen FSR upscaling are not patched into this build. On this base
+they are provided by gamescope, for example
+`DXVK_HDR=1 gamescope -f --hdr-enabled -- %command%` and
+`gamescope -w 1920 -h 1080 -W 3840 -H 2160 -F fsr -f -- %command%`.
 
 ## Limitations
 
