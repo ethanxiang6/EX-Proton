@@ -54,6 +54,7 @@ Applied after Proton-GE's own patch script.
 | File | What it does | Source | Check |
 |---|---|---|---|
 | `patches/wine/0001-winedmo-thread-hevc-vp9-av1-decoders.patch` | GE's video backend (winedmo + FFmpeg) decodes only H.264 multi-threaded; HEVC, VP9 and AV1 used one thread. Gives them the same bounded thread count. Aimed at slow pre-rendered video that plays smoothly on Valve's Proton. | this repository (one-line change to the code added by GE's `ge-video-rework/0076`) | Not confirmed to fix any game: which codec the affected videos use is unknown. |
+| `patches/wine/0002-winedmo-thread-large-video-frame-conversion.patch` | GE's video backend converts each decoded frame (for example YUV to BGRA) on one thread; Valve's GStreamer path uses every core for that step. Converts frames of 1280x720 and larger with libswscale's slice threading, falling back to the old path on any failure. | this repository | Compiles in CI only; not yet tested in a game. |
 | `patches/proton/0001-ex-proton-optional-low-latency-dxvk-and-vkd3d-builds.patch` | Adds build rules for the two extra trees above (`extras/build-*.mk`, modelled on the stock DXVK / vkd3d-proton rules and proton-cachyos' extras) and the launcher-script switches. Written for EX-Proton. | this repository | Applies with `git apply` to the base tree. |
 
 ## Reviewed and not taken
