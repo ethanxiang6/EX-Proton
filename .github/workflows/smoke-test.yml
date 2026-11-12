@@ -67,7 +67,7 @@ jobs:
       - name: Compare layout
         shell: bash
         run: |
-          set -uo pipefail
+          set +e; set -uo pipefail
           ex="t/ex/tool"; ge="t/ge/tool"
           ls -la "$ex" "$ge"
           ( cd "$ex" && find . -printf '%M %y %P\n' | LC_ALL=C sort ) > out/ex-files.txt
@@ -100,7 +100,7 @@ jobs:
       - name: Run both (GE is the control)
         shell: bash
         run: |
-          set -uo pipefail
+          set +e; set -uo pipefail
           cat > t/smoke.sh <<'EOF'
           #!/bin/bash
           # $1 = tool directory name under /t, $2 = label
