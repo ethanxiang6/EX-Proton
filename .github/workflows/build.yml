@@ -167,7 +167,11 @@ jobs:
           cd build
           ls -lh "${BUILD_NAME}.tar.gz" "${BUILD_NAME}.sha512sum"
           sha512sum -c "${BUILD_NAME}.sha512sum"
-          tar -tzf "${BUILD_NAME}.tar.gz" | grep -m1 "^${BUILD_NAME}/compatibilitytool.vdf$"
+          # List to a file first: piping tar into `grep -m1` makes tar fail with
+          # SIGPIPE under pipefail.
+          tar -tzf "${BUILD_NAME}.tar.gz" > tarball-contents.txt
+          grep -x "${BUILD_NAME}/compatibilitytool.vdf" tarball-contents.txt
+          grep -c "/lib/wine/dxvk-low-latency/\|/lib/wine/vkd3d-low-latency/" tarball-contents.txt || true
 
       - name: Upload tarball
         uses: actions/upload-artifact@v5.0.0
