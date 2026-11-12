@@ -1,0 +1,21 @@
+Write the build name into the version file.
+
+The base runs `git describe --tags` on the Proton checkout, which yields
+nothing in this overlay build, so the launcher reported the build as
+"unknown". Use the configured build name instead.
+
+Written for EX-Proton.
+
+diff --git a/Makefile.in b/Makefile.in
+index e4039398d..3bcc81f10 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -1846,7 +1846,7 @@ $(DIST_COPY_TARGETS): | $(DST_DIR)
+ all-dist: $(DIST_COPY_TARGETS)
+ 
+ all-dist:
+-	echo `date '+%s'` `GIT_DIR=$(abspath $(SRCDIR)/.git) git describe --tags` > $(DIST_VERSION)
++	echo `date '+%s'` $(BUILD_NAME) > $(DIST_VERSION)
+ 
+ 
+ ##

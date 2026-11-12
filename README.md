@@ -78,8 +78,12 @@ modifications; use a fresh clone.
 
 ## Installing a built tarball
 
-1. Extract it into `~/.steam/root/compatibilitytools.d/` so that you get
-   `~/.steam/root/compatibilitytools.d/<build name>/`.
+1. Extract it on the Linux machine with `tar` (not a graphical archive tool,
+   and not on Windows: the build needs its file permissions and symlinks):
+   `tar -xf <build name>.tar.gz -C ~/.steam/root/compatibilitytools.d/`
+   so that you get `~/.steam/root/compatibilitytools.d/<build name>/proton`.
+   A tarball downloaded from the Actions tab arrives wrapped in a `.zip`;
+   unzip that first.
 2. Restart Steam.
 3. For each game: Properties, Compatibility, tick "Force the use of a specific
    Steam Play compatibility tool", and select the EX-Proton build.

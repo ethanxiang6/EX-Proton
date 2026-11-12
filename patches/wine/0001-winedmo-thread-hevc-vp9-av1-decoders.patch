@@ -1,0 +1,23 @@
+winedmo: Use multi-threaded decoding for HEVC, VP9 and AV1 as well.
+
+Proton-GE's winedmo backend (ge-video-rework 0076) enables libavcodec
+threading for H.264 only; every other video codec keeps libavcodec's default
+of one thread. High-resolution HEVC / VP9 / AV1 video then decodes on a single
+core, while Valve's winegstreamer path decodes those codecs multi-threaded.
+Apply the same bounded thread count to them.
+
+Written for EX-Proton. Applies after Proton-GE's patch set.
+
+diff --git a/dlls/winedmo/unix_transform.c b/dlls/winedmo/unix_transform.c
+--- a/dlls/winedmo/unix_transform.c
++++ b/dlls/winedmo/unix_transform.c
+@@ -921,7 +921,8 @@
+             t->avctx->framerate.den = t->input_fps_den;
+         }
+
+-        if (codec_id == AV_CODEC_ID_H264)
++        if (codec_id == AV_CODEC_ID_H264 || codec_id == AV_CODEC_ID_HEVC
++            || codec_id == AV_CODEC_ID_VP9 || codec_id == AV_CODEC_ID_AV1)
+         {
+             int thread_count = av_cpu_count();
+

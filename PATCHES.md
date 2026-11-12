@@ -53,9 +53,7 @@ Applied after Proton-GE's own patch script.
 
 | File | What it does | Source | Check |
 |---|---|---|---|
-| `patches/wine/0001-ntdll-make-futex-spinlock-adaptive.patch` | The spinlock guarding ntdll's futex queues spins a bounded number of times before yielding. | CachyOS/wine-cachyos commit `3653b6d3c34bd2a1a6af1ea0dee59b33595b3cfc` (author Marc-Aurel Zent, CodeWeavers) | Applies with `git apply` to GE's Wine pin `fda79a58` after GE's three patches to the same file. Not checked against wine-staging's changes; CI is the check. |
-| `patches/wine/0002-ntdll-increase-number-of-futex-queues-to-1024.patch` | More futex queues, so unrelated `WaitOnAddress` / SRW lock / critical section waiters share a queue less often. | same repo, `276ba28d82c05877226358e9c761dca2dbdf2b81` | as above |
-| `patches/wine/0003-ntdll-improve-futex-queue-selection.patch` | Hashes the address when picking a queue to reduce collisions. | same repo, `324f95f15f12f97fd444436a69ea2df0f7a75eae` | as above |
+| `patches/wine/0001-winedmo-thread-hevc-vp9-av1-decoders.patch` | GE's video backend (winedmo + FFmpeg) decodes only H.264 multi-threaded; HEVC, VP9 and AV1 used one thread. Gives them the same bounded thread count. Aimed at slow pre-rendered video that plays smoothly on Valve's Proton. | this repository (one-line change to the code added by GE's `ge-video-rework/0076`) | Not confirmed to fix any game: which codec the affected videos use is unknown. |
 | `patches/proton/0001-ex-proton-optional-low-latency-dxvk-and-vkd3d-builds.patch` | Adds build rules for the two extra trees above (`extras/build-*.mk`, modelled on the stock DXVK / vkd3d-proton rules and proton-cachyos' extras) and the launcher-script switches. Written for EX-Proton. | this repository | Applies with `git apply` to the base tree. |
 
 ## Reviewed and not taken
@@ -73,6 +71,7 @@ From the comparison of proton-cachyos (`cachyos_11.0_20261014`), Proton-EM
 | gplasync (asynchronous shader compilation) for DXVK | DW-Proton / proton-cachyos | Can cause visual glitches and its author warns against use in games with anti-cheat. |
 | Anti-cheat driver emulation, signature and connection workarounds | DW-Proton | Not carried. |
 | GStreamer-path media patches | DW-Proton / proton-cachyos | GE replaced that media backend. |
+| ntdll futex-queue patches (adaptive spinlock, 1024 queues, hashed queue selection; wine-cachyos `3653b6d3`, `276ba28d`, `324f95f1`) | proton-cachyos | Carried in the first GE-based build, which did not start a game that official GE-Proton11-12 starts. They were the only always-on run-time difference from GE, so they were removed. Not proven to be the cause. |
 | `low_latency_layer` one-commit bump, vkBasalt patches, dxvk-sarek, ZLUDA, PipeWire driver, game-specific protonfixes | various | Little or no bearing on the goals here. |
 
 ## History
