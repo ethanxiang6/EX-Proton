@@ -18,7 +18,7 @@ on:
       build-name:
         description: "Build name (shown in Steam, used for the tarball name)"
         required: false
-        default: "EX-Proton11-1"
+        default: "EX-Proton1-1"
         type: string
   push:
     tags:
@@ -55,7 +55,7 @@ jobs:
           if [ "$REF_TYPE" = "tag" ]; then
             name="$REF_NAME"
           else
-            name="${INPUT_BUILD_NAME:-EX-Proton11-1}"
+            name="${INPUT_BUILD_NAME:-EX-Proton1-1}"
           fi
           if ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
             echo "Invalid build name: '$name' (allowed: A-Z a-z 0-9 . _ -)" >&2

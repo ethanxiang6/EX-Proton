@@ -1,0 +1,84 @@
+# Republishes an existing release under a new name without rebuilding: the
+# tarball's top-level directory and the two text files that carry the build
+# name (compatibilitytool.vdf, version) are renamed, everything else is left
+# byte-for-byte as built. The old release and its tag are then removed.
+
+name: Rename release
+
+on:
+  workflow_dispatch:
+    inputs:
+      old-tag:
+        description: "Existing release tag"
+        required: true
+        type: string
+      new-tag:
+        description: "New release tag / build name"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      OLD: ${{ inputs.old-tag }}
+      NEW: ${{ inputs.new-tag }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for t in "$OLD" "$NEW"; do
+            [[ "$t" =~ ^EX-Proton[0-9]+-[0-9]+$ ]] || { echo "bad tag: $t" >&2; exit 1; }
+          done
+          [ "$OLD" != "$NEW" ]
+          gh release view "$OLD" >/dev/null
+          if gh release view "$NEW" >/dev/null 2>&1; then
+            echo "release $NEW already exists" >&2; exit 1
+          fi
+
+      - name: Checkout (for the release notes)
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: false
+
+      - name: Repackage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "release-notes/${NEW}.md"
+          gh api "repos/$GH_REPO/git/ref/tags/$OLD" --jq .object.sha > old_sha.txt
+          mkdir in work dist
+          gh release download "$OLD" -p "${OLD}.tar.gz" -p "${OLD}.sha512sum" -D in
+          ( cd in && sha512sum -c "${OLD}.sha512sum" )
+          # Extract and repack as root so ownership and modes are kept as built.
+          sudo tar -xzf "in/${OLD}.tar.gz" -C work
+          sudo mv "work/${OLD}" "work/${NEW}"
+          echo "== files that contain the old name:"
+          sudo grep -rIl -- "$OLD" "work/${NEW}" | tee names.txt || true
+          expected="$(printf '%s\n%s\n' "work/${NEW}/compatibilitytool.vdf" "work/${NEW}/version" | sort)"
+          [ "$(sort names.txt)" = "$expected" ] || { echo "unexpected set of files contains the old name" >&2; exit 1; }
+          sudo sed -i "s/${OLD}/${NEW}/g" "work/${NEW}/compatibilitytool.vdf" "work/${NEW}/version"
+          cat "work/${NEW}/version"; grep -n "$NEW" "work/${NEW}/compatibilitytool.vdf"
+          sudo tar --owner=0 --group=0 --numeric-owner -C work -czf "dist/${NEW}.tar.gz" "${NEW}"
+          ( cd dist && sha512sum "${NEW}.tar.gz" > "${NEW}.sha512sum" && cat "${NEW}.sha512sum" && ls -l )
+          # Same entry count and same modes as the original.
+          tar -tvzf "in/${OLD}.tar.gz" | awk '{print $1}' | sort | uniq -c > modes-old.txt
+          tar -tvzf "dist/${NEW}.tar.gz" | awk '{print $1}' | sort | uniq -c > modes-new.txt
+          diff modes-old.txt modes-new.txt
+          [ "$(tar -tzf "in/${OLD}.tar.gz" | wc -l)" = "$(tar -tzf "dist/${NEW}.tar.gz" | wc -l)" ]
+
+      - name: Publish new release, remove old one
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$NEW" "dist/${NEW}.tar.gz" "dist/${NEW}.sha512sum" \
+            --target "$(cat old_sha.txt)" --title "$NEW" --notes-file "release-notes/${NEW}.md"
+          gh release view "$NEW" --json tagName,url,assets --jq '.tagName, .url, (.assets[] | "\(.name) \(.size)")'
+          gh release delete "$OLD" --cleanup-tag --yes

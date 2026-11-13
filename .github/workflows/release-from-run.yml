@@ -14,7 +14,7 @@ on:
       tag:
         description: "Release tag (must equal the build name of that run)"
         required: true
-        default: "EX-Proton11-1"
+        default: "EX-Proton1-1"
         type: string
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "bad run id" >&2; exit 1; }
-          [[ "$TAG" =~ ^EX-Proton[0-9]+-[0-9]+$ ]] || { echo "tag must look like EX-Proton<major>-<n>" >&2; exit 1; }
+          [[ "$TAG" =~ ^EX-Proton[0-9]+-[0-9]+$ ]] || { echo "tag must look like EX-Proton<series>-<n>" >&2; exit 1; }
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "release $TAG already exists" >&2; exit 1
           fi

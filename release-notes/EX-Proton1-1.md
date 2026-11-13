@@ -27,9 +27,9 @@ Not included: Proton-GE's FSR fullscreen upscaling, its Wayland/HDR work, and th
 Extract on the Linux machine with `tar` (not a graphical archive tool):
 
 ```
-tar -xf EX-Proton11-1.tar.gz -C ~/.steam/root/compatibilitytools.d/
+tar -xf EX-Proton1-1.tar.gz -C ~/.steam/root/compatibilitytools.d/
 ```
 
-Restart Steam, then pick `EX-Proton11-1` under the game's Properties, Compatibility.
+Restart Steam, then pick `EX-Proton1-1` under the game's Properties, Compatibility.
 
 Sources and provenance of every component: see `PATCHES.md`. Requires the Steam Linux Runtime 4.0, like the base.

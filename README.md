@@ -23,7 +23,7 @@ These are goals, not results:
 
 ## Status
 
-`EX-Proton11-1` has been tested by the maintainer in one game (Crimson Desert,
+`EX-Proton1-1` has been tested by the maintainer in one game (Crimson Desert,
 AMD GPU): it launches and pre-rendered videos play smoothly. Nothing has been
 benchmarked, and not every optional switch has been tested. Do not assume any
 goal above has been met.
@@ -31,9 +31,9 @@ goal above has been met.
 ## Versioning
 
 - The repository name stays `EX-Proton`.
-- Releases are tagged `EX-Proton<major>-<n>`, for example `EX-Proton11-1`:
-  `<major>` is the Proton major version of the base and `<n>` counts EX-Proton
-  releases on that major version.
+- Releases are tagged `EX-Proton<series>-<n>`, for example `EX-Proton1-1`:
+  `<series>` is EX-Proton's own series number and `<n>` counts releases in that
+  series. The numbers are not tied to the upstream Proton version.
 - When the upstream base publishes a new version, the `proton` submodule pin is
   moved to the new tag, the overrides and patches are re-checked, and a new
   release is tagged. The exact base of each release is recorded in
@@ -70,9 +70,9 @@ scripts/prepare.sh           submodules -> overrides -> extras -> our patches
 git clone https://github.com/ethanxiang6/EX-Proton.git && cd EX-Proton
 scripts/prepare.sh --jobs "$(nproc)"      # downloads many submodules; needs git, bash, patch, wget
 mkdir build && cd build
-../proton/configure.sh --enable-ccache --container-engine=docker --build-name=EX-Proton11-1
+../proton/configure.sh --enable-ccache --container-engine=docker --build-name=EX-Proton1-1
 make -j"$(nproc)" redist
-tar --transform 's,^redist,EX-Proton11-1,' -czf EX-Proton11-1.tar.gz redist
+tar --transform 's,^redist,EX-Proton1-1,' -czf EX-Proton1-1.tar.gz redist
 ```
 
 `make redist` writes the build into `build/redist/`; the last line packages it.
