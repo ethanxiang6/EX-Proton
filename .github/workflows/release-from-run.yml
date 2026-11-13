@@ -1,0 +1,72 @@
+# Publishes a GitHub release from the artifacts of an existing, already tested
+# "Build EX-Proton" run, without rebuilding. The tag is created at the commit
+# that run was built from.
+
+name: Release from build run
+
+on:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: "Build EX-Proton run id whose artifacts to release"
+        required: true
+        type: string
+      tag:
+        description: "Release tag (must equal the build name of that run)"
+        required: true
+        default: "EX-Proton11-1"
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ inputs.run-id }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "bad run id" >&2; exit 1; }
+          [[ "$TAG" =~ ^EX-Proton[0-9]+-[0-9]+$ ]] || { echo "tag must look like EX-Proton<major>-<n>" >&2; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists" >&2; exit 1
+          fi
+
+      - name: Checkout (for the release notes)
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: false
+
+      - name: Download and verify artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          conclusion="$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID" --jq .conclusion)"
+          [ "$conclusion" = "success" ] || { echo "run $RUN_ID did not succeed ($conclusion)" >&2; exit 1; }
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID" --jq .head_sha > head_sha.txt
+          mkdir dist
+          gh run download "$RUN_ID" -n "${TAG}.tar.gz" -D dist
+          gh run download "$RUN_ID" -n "${TAG}.sha512sum" -D dist
+          cd dist
+          sha512sum -c "${TAG}.sha512sum"
+          ls -l
+
+      - name: Create release
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(cat head_sha.txt)"
+          notes="release-notes/${TAG}.md"
+          test -f "$notes"
+          gh release create "$TAG" "dist/${TAG}.tar.gz" "dist/${TAG}.sha512sum" \
+            --target "$sha" --title "$TAG" --notes-file "$notes"
+          gh release view "$TAG" --json tagName,url,assets --jq '.tagName, .url, (.assets[] | "\(.name) \(.size)")'

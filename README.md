@@ -23,8 +23,10 @@ These are goals, not results:
 
 ## Status
 
-Nothing has been benchmarked. See the Actions tab for whether the latest build
-compiled. Do not assume any goal above has been met.
+`EX-Proton11-1` has been tested by the maintainer in one game (Crimson Desert,
+AMD GPU): it launches and pre-rendered videos play smoothly. Nothing has been
+benchmarked, and not every optional switch has been tested. Do not assume any
+goal above has been met.
 
 ## Versioning
 
