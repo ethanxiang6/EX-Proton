@@ -104,6 +104,7 @@ not exist in this build.
 
 | `LOW_LATENCY_LAYER=1` | Load the Korthos Vulkan low-latency layer (same switch as Proton-GE). |
 | `PROTON_FSR4_UPGRADE=1` | Download AMD's FSR4 DLL into the prefix (via protonfixes, from a third-party manifest) and upgrade FSR 3.1 games to FSR4 through Wine's `amdxc64`. |
+| `PROTON_LOCAL_SHADER_CACHE=1` | Keep a per-game shader cache (Mesa / driver, DXVK, vkd3d-proton) in the game's Steam shader directory. Meant for use with Steam's shader pre-caching switched off. |
 
 All are off by default; see [PATCHES.md](PATCHES.md) for what they are and
 their limits. protonfixes (per-game fixes from umu-protonfixes) runs

@@ -144,7 +144,7 @@ index 000000000..47c23cc54
 +
 +endif # extras/protonfixes present
 diff --git a/proton b/proton
-index fafa6c03b..26d74652d 100755
+index fafa6c03b..cfc0ca680 100755
 --- a/proton
 +++ b/proton
 @@ -19,6 +19,14 @@ import uuid
@@ -162,7 +162,7 @@ index fafa6c03b..26d74652d 100755
  from ctypes import CDLL
  from ctypes import CFUNCTYPE
  from ctypes import POINTER
-@@ -1794,6 +1802,19 @@ class Session:
+@@ -1794,6 +1802,24 @@ class Session:
          # leave two cores free on machines with more than four.
          self.check_environment("PROTON_DXVK_LOWLATENCY", "dxvklowlatency")
          self.check_environment("PROTON_VKD3D_LOWLATENCY", "vkd3dlowlatency")
@@ -179,10 +179,15 @@ index fafa6c03b..26d74652d 100755
 +        # EX-Proton: PROTON_FSR4_UPGRADE=1 has protonfixes download AMD's FSR4
 +        # DLL into the prefix and enables Wine's amdxc64 FSR 3.1 -> FSR4 upgrade.
 +        self.check_environment("PROTON_FSR4_UPGRADE", "fsr4")
++
++        # EX-Proton: PROTON_LOCAL_SHADER_CACHE=1 keeps a per-game driver, DXVK and
++        # vkd3d-proton shader cache in the game's Steam shader directory (for use
++        # with Steam's shader pre-caching switched off). Set up by protonfixes.
++        self.check_environment("PROTON_LOCAL_SHADER_CACHE", "localshadercache")
          if "dxvklowlatency" in self.compat_config:
              cpus = os.cpu_count() or 1
              threads = cpus - (2 if cpus > 4 else (1 if cpus > 2 else 0))
-@@ -2219,6 +2240,24 @@ if __name__ == "__main__":
+@@ -2219,6 +2245,25 @@ if __name__ == "__main__":
  
      g_session.init_session(sys.argv[1] != "runinprefix")
  
@@ -193,6 +198,7 @@ index fafa6c03b..26d74652d 100755
 +            protonfixes.setup_mount_drives(setup_dir_drive)
 +            protonfixes.winetricks(g_session.env, g_proton.wine_bin, g_proton.wineserver_bin)
 +            protonfixes.setup_frame_rate(g_session.env, append_to_env_str)
++            protonfixes.setup_local_shader_cache(g_session.compat_config, g_session.env)
 +            # Only when asked for: without the flag this would switch off the
 +            # base's own automatic FSR4 handling.
 +            if "fsr4" in g_session.compat_config:
