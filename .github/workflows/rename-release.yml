@@ -1,7 +1,10 @@
 # Republishes an existing release under a new name without rebuilding: the
 # tarball's top-level directory and the two text files that carry the build
 # name (compatibilitytool.vdf, version) are renamed, everything else is left
-# byte-for-byte as built. The old release and its tag are then removed.
+# byte-for-byte as built. The old release and its tag are then removed. The new
+# tag is placed on the commit this workflow runs from (the one that carries the
+# renamed docs); the default token is refused when asked to tag an older commit
+# whose workflow files differ.
 
 name: Rename release
 
@@ -79,6 +82,6 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$NEW" "dist/${NEW}.tar.gz" "dist/${NEW}.sha512sum" \
-            --target "$(cat old_sha.txt)" --title "$NEW" --notes-file "release-notes/${NEW}.md"
+            --target "$GITHUB_SHA" --title "$NEW" --notes-file "release-notes/${NEW}.md"
           gh release view "$NEW" --json tagName,url,assets --jq '.tagName, .url, (.assets[] | "\(.name) \(.size)")'
           gh release delete "$OLD" --cleanup-tag --yes
