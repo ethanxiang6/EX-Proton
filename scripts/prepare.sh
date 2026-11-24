@@ -10,8 +10,10 @@
 #      at the proton root; any other directory applies in proton/<component>,
 #      with "__" in the directory name standing for "/")
 #
-# Usage: scripts/prepare.sh [--jobs N]
-#   --jobs N   parallel submodule clones (default: $EXPROTON_JOBS, else nproc, else 4)
+# Usage: scripts/prepare.sh [--jobs N] [--target-arch x86_64|arm64]
+#   --jobs N          parallel submodule clones (default: $EXPROTON_JOBS, else nproc, else 4)
+#   --target-arch A   build target (default x86_64). Patches listed in
+#                     patches/x86_64-only.list are skipped for arm64.
 
 set -euo pipefail
 
@@ -19,17 +21,24 @@ die() { echo "prepare.sh: ERROR: $*" >&2; exit 1; }
 info() { echo "prepare.sh: $*"; }
 
 JOBS="${EXPROTON_JOBS:-}"
+TARGET_ARCH=x86_64
 while [ $# -gt 0 ]; do
     case "$1" in
         --jobs)   [ $# -ge 2 ] || die "--jobs needs a value"; JOBS="$2"; shift 2 ;;
         --jobs=*) JOBS="${1#--jobs=}"; shift ;;
-        -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --target-arch)   [ $# -ge 2 ] || die "--target-arch needs a value"; TARGET_ARCH="$2"; shift 2 ;;
+        --target-arch=*) TARGET_ARCH="${1#--target-arch=}"; shift ;;
+        -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
 if [ -z "$JOBS" ]; then
     JOBS="$(nproc 2>/dev/null || echo 4)"
 fi
+case "$TARGET_ARCH" in
+    x86_64|arm64) ;;
+    *) die "--target-arch must be x86_64 or arm64, got '$TARGET_ARCH'" ;;
+esac
 case "$JOBS" in
     ''|*[!0-9]*|0) die "--jobs must be a positive integer, got '$JOBS'" ;;
 esac
@@ -186,7 +195,17 @@ else
 fi
 
 # --- 4. our patches ---------------------------------------------------------
+# patches/x86_64-only.list: one path per line, relative to patches/ (for example
+# wine/0006-foo.patch). Those patches are not applied when building for arm64.
+X86_ONLY_LIST="$ROOT/patches/x86_64-only.list"
+is_x86_only() {
+    local rel="$1"
+    [ -f "$X86_ONLY_LIST" ] || return 1
+    tr -d '\r' < "$X86_ONLY_LIST" | grep -v '^[[:space:]]*\(#\|$\)' | grep -qxF -- "$rel"
+}
+info "target architecture: $TARGET_ARCH"
 n_patch=0
+n_skip=0
 if [ -d "$ROOT/patches" ]; then
     for pdir in "$ROOT"/patches/*/; do
         [ -d "$pdir" ] || continue
@@ -207,6 +226,11 @@ if [ -d "$ROOT/patches" ]; then
 
         for patch in "${patches[@]}"; do
             name="patches/$component/$(basename "$patch")"
+            if [ "$TARGET_ARCH" != x86_64 ] && is_x86_only "$component/$(basename "$patch")"; then
+                info "skipping $name (x86_64 only)"
+                n_skip=$((n_skip + 1))
+                continue
+            fi
             info "applying $name"
             if ! git -C "$target" apply --whitespace=nowarn "$patch"; then
                 die "patch failed to apply: $name"
@@ -218,4 +242,4 @@ else
     info "no patches/ directory; skipping patches"
 fi
 
-info "done: $n_over override(s), $n_extra extra tree(s), $n_patch patch(es) applied"
+info "done: $n_over override(s), $n_extra extra tree(s), $n_patch patch(es) applied, $n_skip skipped for $TARGET_ARCH"

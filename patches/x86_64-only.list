@@ -1,0 +1,8 @@
+# Patches not applied to arm64 builds (scripts/prepare.sh --target-arch arm64).
+# Paths are relative to patches/.
+#
+# QueryPerformanceCounter from the x86 TSC. The code is already compiled only
+# for x86-64 (not ARM64EC), but the ARM64 build also builds x86-64 Windows
+# code that runs under FEX, where reading the TSC directly is not wanted.
+wine/0006-ntdll-read-qpc-from-the-tsc-in-user-mode.patch
+wine/0007-ntdll-only-read-kernel-clocksource-for-qpc-at-start-up.patch
