@@ -13,7 +13,8 @@
 # Usage: scripts/prepare.sh [--jobs N] [--target-arch x86_64|arm64]
 #   --jobs N          parallel submodule clones (default: $EXPROTON_JOBS, else nproc, else 4)
 #   --target-arch A   build target (default x86_64). Patches listed in
-#                     patches/x86_64-only.list are skipped for arm64.
+#                     patches/x86_64-only.list are skipped for arm64, and those
+#                     in patches/arm64-only.list for x86_64.
 
 set -euo pipefail
 
@@ -28,7 +29,7 @@ while [ $# -gt 0 ]; do
         --jobs=*) JOBS="${1#--jobs=}"; shift ;;
         --target-arch)   [ $# -ge 2 ] || die "--target-arch needs a value"; TARGET_ARCH="$2"; shift 2 ;;
         --target-arch=*) TARGET_ARCH="${1#--target-arch=}"; shift ;;
-        -h|--help) sed -n '2,18p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '2,19p'"${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -95,6 +96,37 @@ if [ "$TARGET_ARCH" = arm64 ] && [ -f "$PROTON/FEX/.git" ]; then
     sed -i '/^[[:space:]]*worktree[[:space:]]*=/d' "$PROTON/FEX/.git/config"
     git -C "$PROTON/FEX" describe --abbrev=7 \
         || die "git describe still fails in proton/FEX"
+fi
+
+# --- 1c. ARM64: ONNX Runtime for piper ----------------------------------------
+# piper-phonemize (built by the base for its text-to-speech support) downloads
+# ONNX Runtime 1.14.1 from github.com/microsoft/onnxruntime release assets,
+# which return 404. Place the same release, taken from Microsoft's
+# Microsoft.ML.OnnxRuntime 1.14.1 NuGet package (checked against the SHA-512
+# NuGet publishes for it), where patches/piper/ makes piper use it.
+ORT_NUPKG_URL="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.14.1/microsoft.ml.onnxruntime.1.14.1.nupkg"
+ORT_NUPKG_SHA512="99cb4bbe32306ce40ce07b8f53fc79a8cff6d4eff865a4ff1e2d45ec8df3a8c400da3a37a3329a070a8fc0c3dd5abd9627739daa888bdd1f118168dd83550672"
+if [ "$TARGET_ARCH" = arm64 ]; then
+    ort_dir="$PROTON/piper/ex-onnxruntime/onnxruntime-linux-aarch64-1.14.1"
+    info "arm64: placing ONNX Runtime 1.14.1 (NuGet) in proton/piper/ex-onnxruntime"
+    command -v unzip >/dev/null || die "unzip is needed for the ONNX Runtime package"
+    ort_tmp="$(mktemp -d)"
+    curl -fsSL --retry 5 --retry-delay 5 -o "$ort_tmp/ort.nupkg" "$ORT_NUPKG_URL" \
+        || die "downloading $ORT_NUPKG_URL failed"
+    echo "$ORT_NUPKG_SHA512  $ort_tmp/ort.nupkg" | sha512sum -c --quiet - \
+        || die "ONNX Runtime package checksum mismatch"
+    mkdir -p "$ort_dir/include" "$ort_dir/lib"
+    unzip -q -j -o "$ort_tmp/ort.nupkg" 'build/native/include/*' -d "$ort_dir/include"
+    unzip -q -j -o "$ort_tmp/ort.nupkg" 'runtimes/linux-arm64/native/libonnxruntime.so' -d "$ort_tmp"
+    ort_soname="$(readelf -d "$ort_tmp/libonnxruntime.so" 2>/dev/null | sed -n 's/.*Library soname: \[\(.*\)\].*/\1/p')"
+    [ -n "$ort_soname" ] || ort_soname=libonnxruntime.so.1.14.1
+    cp "$ort_tmp/libonnxruntime.so" "$ort_dir/lib/$ort_soname"
+    if [ "$ort_soname" != libonnxruntime.so ]; then
+        ln -sf "$ort_soname" "$ort_dir/lib/libonnxruntime.so"
+    fi
+    rm -rf "$ort_tmp"
+    [ -f "$ort_dir/include/onnxruntime_cxx_api.h" ] || die "ONNX Runtime headers missing"
+    ls -l "$ort_dir/lib"
 fi
 
 # --- 2. overrides -----------------------------------------------------------
@@ -217,13 +249,20 @@ else
 fi
 
 # --- 4. our patches ---------------------------------------------------------
-# patches/x86_64-only.list: one path per line, relative to patches/ (for example
-# wine/0006-foo.patch). Those patches are not applied when building for arm64.
+# patches/x86_64-only.list and patches/arm64-only.list: one path per line,
+# relative to patches/ (for example wine/0006-foo.patch). A patch listed in one
+# of them is applied only when building for that architecture.
 X86_ONLY_LIST="$ROOT/patches/x86_64-only.list"
-is_x86_only() {
-    local rel="$1"
-    [ -f "$X86_ONLY_LIST" ] || return 1
-    tr -d '\r' < "$X86_ONLY_LIST" | grep -v '^[[:space:]]*\(#\|$\)' | grep -qxF -- "$rel"
+ARM64_ONLY_LIST="$ROOT/patches/arm64-only.list"
+in_list() {
+    local list="$1" rel="$2"
+    [ -f "$list" ] || return 1
+    tr -d '\r' < "$list" | grep -v '^[[:space:]]*\(#\|$\)' | grep -qxF -- "$rel"
+}
+skip_for_arch() {
+    if [ "$TARGET_ARCH" != x86_64 ] && in_list "$X86_ONLY_LIST" "$1"; then return 0; fi
+    if [ "$TARGET_ARCH" != arm64 ] && in_list "$ARM64_ONLY_LIST" "$1"; then return 0; fi
+    return 1
 }
 info "target architecture: $TARGET_ARCH"
 n_patch=0
@@ -248,8 +287,8 @@ if [ -d "$ROOT/patches" ]; then
 
         for patch in "${patches[@]}"; do
             name="patches/$component/$(basename "$patch")"
-            if [ "$TARGET_ARCH" != x86_64 ] && is_x86_only "$component/$(basename "$patch")"; then
-                info "skipping $name (x86_64 only)"
+            if skip_for_arch "$component/$(basename "$patch")"; then
+                info "skipping $name (not for $TARGET_ARCH)"
                 n_skip=$((n_skip + 1))
                 continue
             fi

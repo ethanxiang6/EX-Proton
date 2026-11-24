@@ -1,0 +1,6 @@
+# Patches applied only to arm64 builds (scripts/prepare.sh --target-arch arm64).
+# Paths are relative to patches/.
+#
+# Makes piper use the ONNX Runtime that prepare.sh places for arm64 builds
+# (the GitHub download it normally uses returns 404).
+piper/0001-ex-proton-use-prepared-onnxruntime.patch
