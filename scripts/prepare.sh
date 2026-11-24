@@ -75,6 +75,25 @@ check_clean "after top-level init"
 info "initialising nested submodules (jobs=$JOBS); this downloads a lot"
 git -C "$PROTON" submodule update --init --filter=tree:0 --recursive --jobs "$JOBS"
 
+# --- 1b. ARM64: FEX needs its git history inside the build container ---------
+# The base's FEX build rules run `git describe` in proton/FEX inside the SDK
+# container, which mounts only the source and build trees. As a submodule of
+# this repository, proton/FEX keeps its git directory in ./.git/modules/...,
+# outside that mount. Give it a self-contained git directory, with FEX's
+# release tags (annotated) so that `git describe` finds one.
+if [ "$TARGET_ARCH" = arm64 ] && [ -f "$PROTON/FEX/.git" ]; then
+    info "arm64: making proton/FEX a self-contained git checkout with its tags"
+    fex_gitdir="$(git -C "$PROTON/FEX" rev-parse --absolute-git-dir)" \
+        || die "cannot find proton/FEX's git directory"
+    git -C "$PROTON/FEX" fetch -q --filter=tree:0 --tags origin \
+        || die "fetching FEX tags failed"
+    rm -f "$PROTON/FEX/.git"
+    cp -a "$fex_gitdir" "$PROTON/FEX/.git"
+    git -C "$PROTON/FEX" config --unset core.worktree || true
+    git -C "$PROTON/FEX" describe --abbrev=7 \
+        || die "git describe still fails in proton/FEX"
+fi
+
 # --- 2. overrides -----------------------------------------------------------
 OVERRIDES="$ROOT/overrides.conf"
 n_over=0
