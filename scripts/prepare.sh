@@ -89,7 +89,10 @@ if [ "$TARGET_ARCH" = arm64 ] && [ -f "$PROTON/FEX/.git" ]; then
         || die "fetching FEX tags failed"
     rm -f "$PROTON/FEX/.git"
     cp -a "$fex_gitdir" "$PROTON/FEX/.git"
-    git -C "$PROTON/FEX" config --unset core.worktree || true
+    # Remove the copied (now wrong, relative) core.worktree line as plain text:
+    # any git command, even `git config --file`, run in proton/FEX would first
+    # try to enter it and fail.
+    sed -i '/^[[:space:]]*worktree[[:space:]]*=/d' "$PROTON/FEX/.git/config"
     git -C "$PROTON/FEX" describe --abbrev=7 \
         || die "git describe still fails in proton/FEX"
 fi
