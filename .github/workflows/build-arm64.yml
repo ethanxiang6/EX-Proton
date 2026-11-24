@@ -76,11 +76,15 @@ jobs:
       - name: Prepare Proton tree (submodules, overrides, extras, patches)
         run: ./scripts/prepare.sh --jobs "$(nproc)" --target-arch arm64
 
-      # CI only: build without debug info so the build fits on the runner's disk.
-      - name: Strip binaries early (CI disk saving)
+      # CI only: build without debug info so the build fits on the runner's
+      # disk. The x86-64 job's patch (-ggdb -> -s) does not work here: the ARM64
+      # SDK compiles with clang, which rejects the link-only -s in meson's
+      # compile checks (dav1d: "Atomics not supported"). -g0 has the same effect
+      # on disk; the dist files are stripped by the build either way.
+      - name: Build without debug info (CI disk saving)
         run: |
-          git -C proton apply --verbose ../.github/patches/0001-build-strip-binaries-early.patch
-          grep -n '^CFLAGS += -s ' proton/Makefile.in
+          sed -i 's/^CFLAGS += -ggdb /CFLAGS += -g0 /' proton/Makefile.in
+          grep -n '^CFLAGS += -g0 ' proton/Makefile.in
 
       - name: Configure
         shell: bash
