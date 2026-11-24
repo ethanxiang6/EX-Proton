@@ -42,6 +42,23 @@ The Wine patches are taken unchanged from Proton-GE
 (GloriousEggroll/proton-ge-custom, commit `2b270a204beb7379efd8357462d3baa301e9dacd`;
 the source paths below are inside that repository). All apply with `git apply`
 to the Wine pin above, in this order. Apply-checked; CI is the compile check.
+The ARM64 build (`--target-arch arm64`) leaves out 0006 and 0007, which read an
+x86-only CPU counter (listed in `patches/x86_64-only.list`); everything else is
+the same in both builds.
+
+ARM64-only (listed in `patches/arm64-only.list`):
+
+| File | What it does | Source |
+|---|---|---|
+| `patches/piper/0001-ex-proton-use-prepared-onnxruntime.patch` | The base's text-to-speech component (piper) downloads ONNX Runtime 1.14.1 from github.com/microsoft/onnxruntime, which now returns 404. For ARM64 builds `scripts/prepare.sh` takes the same release from Microsoft's `Microsoft.ML.OnnxRuntime` 1.14.1 NuGet package (checked against NuGet's published SHA-512), and this patch makes piper use it. | this repository |
+
+The same download is in the x86-64 build, so a new x86-64 build will need this
+too. `EX-Proton1-1` was built before the download broke.
+
+The ARM64 build also gives `proton/FEX` a self-contained git directory (the
+base's FEX build runs `git describe` inside the build container) and builds
+with `-g0` instead of the x86-64 CI's `-s` (clang rejects `-s` in compile
+checks).
 
 | File | What it does | Source in Proton-GE |
 |---|---|---|

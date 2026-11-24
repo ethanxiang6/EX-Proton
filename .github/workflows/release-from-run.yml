@@ -1,6 +1,7 @@
-# Publishes a GitHub release from the artifacts of an existing, already tested
-# "Build EX-Proton" run, without rebuilding. The tag is created at the commit
-# that run was built from.
+# Publishes a GitHub release from the artifacts of an existing "Build EX-Proton"
+# or "Build EX-Proton (ARM64)" run, without rebuilding. The tag is created at
+# the commit this workflow runs from; the release log names the commit the
+# build was made from. Tags ending in -aarch64 are published as pre-releases.
 
 name: Release from build run
 
@@ -12,7 +13,7 @@ on:
         required: true
         type: string
       tag:
-        description: "Release tag (must equal the build name of that run)"
+        description: "Release tag (must equal the build name of that run; ARM64 builds end in -aarch64)"
         required: true
         default: "EX-Proton1-1"
         type: string
@@ -36,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "bad run id" >&2; exit 1; }
-          [[ "$TAG" =~ ^EX-Proton[0-9]+-[0-9]+$ ]] || { echo "tag must look like EX-Proton<series>-<n>" >&2; exit 1; }
+          [[ "$TAG" =~ ^EX-Proton[0-9]+-[0-9]+(-aarch64)?$ ]] || { echo "tag must look like EX-Proton<series>-<n>[-aarch64]" >&2; exit 1; }
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "release $TAG already exists" >&2; exit 1
           fi
@@ -64,9 +65,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha="$(cat head_sha.txt)"
+          echo "built from commit $(cat head_sha.txt)"
           notes="release-notes/${TAG}.md"
           test -f "$notes"
+          extra=()
+          # ARM64 releases are published as pre-releases: they are built but
+          # untested, and must not replace the x86-64 release as "Latest".
+          case "$TAG" in *-aarch64) extra=(--prerelease --latest=false) ;; esac
+          # The tag goes on the commit this workflow runs from: the default
+          # token is refused when asked to tag an older commit whose workflow
+          # files differ.
           gh release create "$TAG" "dist/${TAG}.tar.gz" "dist/${TAG}.sha512sum" \
-            --target "$sha" --title "$TAG" --notes-file "$notes"
+            --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes" "${extra[@]}"
           gh release view "$TAG" --json tagName,url,assets --jq '.tagName, .url, (.assets[] | "\(.name) \(.size)")'
