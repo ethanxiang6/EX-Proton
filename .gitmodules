@@ -1,6 +1,6 @@
 [submodule "wine"]
 	path = wine
-	url = ../wine
+	url = https://github.com/ValveSoftware/wine.git
 [submodule "dxvk"]
 	path = dxvk
 	url = https://github.com/doitsujin/dxvk.git
@@ -81,3 +81,24 @@
 [submodule "piper-phonemize"]
 	path = piper-phonemize
 	url = https://github.com/shaunren/piper-phonemize
+[submodule "extras/dxvk-low-latency"]
+	path = extras/dxvk-low-latency
+	url = https://github.com/netborg-afps/dxvk-low-latency.git
+[submodule "extras/vkd3d-low-latency"]
+	path = extras/vkd3d-low-latency
+	url = https://github.com/netborg-afps/vkd3d-low-latency.git
+[submodule "extras/low_latency_layer"]
+	path = extras/low_latency_layer
+	url = https://github.com/Korthos-Software/low_latency_layer.git
+[submodule "extras/Vulkan-Utility-Libraries"]
+	path = extras/Vulkan-Utility-Libraries
+	url = https://github.com/KhronosGroup/Vulkan-Utility-Libraries.git
+[submodule "extras/Vulkan-Headers-layer"]
+	path = extras/Vulkan-Headers-layer
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "extras/protonfixes"]
+	path = extras/protonfixes
+	url = https://github.com/open-wine-components/umu-protonfixes.git
+[submodule "extras/discord-rpc-bridge"]
+	path = extras/discord-rpc-bridge
+	url = https://github.com/enderice2/rpc-bridge.git
