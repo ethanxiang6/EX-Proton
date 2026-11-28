@@ -1175,6 +1175,13 @@ class CompatData:
                 try_copy(g_proton.dist_dir + "share/openxr/wineopenxr64.json", "drive_c/openxr",
                         prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
 
+                # EX-Proton: Discord Rich Presence bridge (x86-64 builds only);
+                # steam.exe registers and starts it, see steam_helper/steam.c.
+                if os.path.exists(g_proton.lib_dir + "wine/discord-rpc-bridge/bridge.exe"):
+                    makedirs(self.prefix_dir + "drive_c/windows/system32/discord/")
+                    try_copy(g_proton.lib_dir + "wine/discord-rpc-bridge/bridge.exe", "drive_c/windows/system32/discord",
+                            prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
+
                 #copy contrib dlls
                 try_copy(g_proton.contrib_dir + "amdxcffx64.dll", "drive_c/windows/system32",
                         prefix=self.prefix_dir, track_file=tracked_files, link_debug=True,

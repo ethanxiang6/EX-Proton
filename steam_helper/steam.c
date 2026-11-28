@@ -320,6 +320,60 @@ static BOOL should_use_shell_execute(WCHAR *cmdline)
     return use_shell_execute;
 }
 
+/* EX-Proton: Discord Rich Presence bridge (enderice2/rpc-bridge, built for
+ * x86-64 only). The launcher copies bridge.exe into the prefix; register it as
+ * a demand-start Wine service once and start it for game processes, so that a
+ * game's \\.\pipe\discord-ipc-0 reaches the native Linux Discord client.
+ * On by default; PROTON_DISCORD_BRIDGE=0 turns it off. Based on Proton-GE's
+ * steam_helper patch by Stelios Tsampas. */
+static void setup_discord_bridge_service(void)
+{
+    static const WCHAR exe_path[] = L"c:\\windows\\system32\\discord\\bridge.exe";
+    WCHAR bridge_cmd[MAX_PATH] = L"c:\\windows\\system32\\discord\\bridge.exe --service";
+    const char *opt = getenv("PROTON_DISCORD_BRIDGE");
+    SC_HANDLE manager, service;
+    DWORD id;
+
+    if (opt && opt[0] == '0')
+        return;
+    if (GetFileAttributesW(exe_path) == INVALID_FILE_ATTRIBUTES)
+        return;
+
+    manager = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (!manager)
+    {
+        ERR("(discord-bridge) OpenSCManagerW failed, error %lu\n", GetLastError());
+        return;
+    }
+
+    service = OpenServiceW(manager, L"discord-bridge", SERVICE_START);
+    if (!service)
+    {
+        if (GetLastError() != ERROR_SERVICE_DOES_NOT_EXIST)
+        {
+            ERR("(discord-bridge) OpenServiceW failed, error %lu\n", GetLastError());
+            CloseServiceHandle(manager);
+            return;
+        }
+        TRACE("(discord-bridge) registering %s\n", debugstr_w(bridge_cmd));
+        service = CreateServiceW(manager, L"discord-bridge", L"Wine Discord RPC Bridge",
+                SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL,
+                bridge_cmd, NULL, &id, NULL, NULL, NULL);
+        if (!service)
+        {
+            ERR("(discord-bridge) CreateServiceW failed, error %lu\n", GetLastError());
+            CloseServiceHandle(manager);
+            return;
+        }
+    }
+
+    if (!StartServiceW(service, 0, NULL) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
+        ERR("(discord-bridge) StartServiceW failed, error %lu\n", GetLastError());
+
+    CloseServiceHandle(service);
+    CloseServiceHandle(manager);
+}
+
 static BOOL try_recover_eadesktop_symlink(void)
 {
     WIN32_FIND_DATAA ff;
@@ -985,6 +1039,9 @@ int main(int argc, char *argv[])
 
         if (game_process)
             setup_vr_registry();
+
+        if (game_process)
+            setup_discord_bridge_service();
 
         child = run_process(&should_await, game_process);
 

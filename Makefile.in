@@ -905,6 +905,7 @@ include $(SRC)/extras/build-dxvk-low-latency.mk
 include $(SRC)/extras/build-vkd3d-low-latency.mk
 include $(SRC)/extras/build-low_latency_layer.mk
 include $(SRC)/extras/build-protonfixes.mk
+include $(SRC)/extras/build-discord-rpc-bridge.mk
 
 
 ##
