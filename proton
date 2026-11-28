@@ -1199,10 +1199,26 @@ class CompatData:
                     try_copy(g_proton.default_pfx_dir + "drive_c/windows/syswow64/" + f + ".dll", "drive_c/windows/syswow64",
                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
 
+                # EX-Proton: optional low-latency builds, selected per launch with
+                # PROTON_DXVK_LOWLATENCY=1 / PROTON_VKD3D_LOWLATENCY=1. Fall back to
+                # the stock builds when the low-latency ones were not built.
+                dxvk_dir = "wine/dxvk"
+                if "dxvklowlatency" in g_session.compat_config:
+                    if os.path.isdir(g_proton.lib_dir + "wine/dxvk-low-latency"):
+                        dxvk_dir = "wine/dxvk-low-latency"
+                    else:
+                        log("PROTON_DXVK_LOWLATENCY set but this build has no dxvk-low-latency; using stock DXVK")
+                vkd3d_proton_dir = "wine/vkd3d-proton"
+                if "vkd3dlowlatency" in g_session.compat_config:
+                    if os.path.isdir(g_proton.lib_dir + "wine/vkd3d-low-latency"):
+                        vkd3d_proton_dir = "wine/vkd3d-low-latency"
+                    else:
+                        log("PROTON_VKD3D_LOWLATENCY set but this build has no vkd3d-low-latency; using stock vkd3d-proton")
+
                 for f in dxvkfiles:
-                    try_copy(g_proton.arch_pe_dir("wine/dxvk", False) + f + ".dll", "drive_c/windows/system32",
+                    try_copy(g_proton.arch_pe_dir(dxvk_dir, False) + f + ".dll", "drive_c/windows/system32",
                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
-                    try_copy(g_proton.arch_pe_dir("wine/dxvk", True) + f + ".dll", "drive_c/windows/syswow64",
+                    try_copy(g_proton.arch_pe_dir(dxvk_dir, True) + f + ".dll", "drive_c/windows/syswow64",
                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True)
                     g_session.dlloverrides[f] = "n"
 
@@ -1210,9 +1226,9 @@ class CompatData:
                     optional = False
                     if f == "d3d12core":
                         optional = True
-                    try_copy(g_proton.arch_pe_dir("wine/vkd3d-proton", False) + f + ".dll", "drive_c/windows/system32",
+                    try_copy(g_proton.arch_pe_dir(vkd3d_proton_dir, False) + f + ".dll", "drive_c/windows/system32",
                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True, optional=optional)
-                    try_copy(g_proton.arch_pe_dir("wine/vkd3d-proton", True) + f + ".dll", "drive_c/windows/syswow64",
+                    try_copy(g_proton.arch_pe_dir(vkd3d_proton_dir, True) + f + ".dll", "drive_c/windows/syswow64",
                             prefix=self.prefix_dir, track_file=tracked_files, link_debug=True, optional=optional)
                     g_session.dlloverrides[f] = "n"
 
@@ -1789,6 +1805,17 @@ class Session:
         if not self.check_environment("PROTON_USE_WINED3D", "wined3d"):
             self.check_environment("PROTON_USE_WINED3D11", "wined3d")
         self.check_environment("PROTON_DXVK_D3D8", "dxvkd3d8")
+
+        # EX-Proton: opt-in low-latency DXVK / vkd3d-proton builds (see
+        # setup_prefix). Shader compiler thread count follows proton-cachyos:
+        # leave two cores free on machines with more than four.
+        self.check_environment("PROTON_DXVK_LOWLATENCY", "dxvklowlatency")
+        self.check_environment("PROTON_VKD3D_LOWLATENCY", "vkd3dlowlatency")
+        if "dxvklowlatency" in self.compat_config:
+            cpus = os.cpu_count() or 1
+            threads = cpus - (2 if cpus > 4 else (1 if cpus > 2 else 0))
+            append_to_env_str(self.env, "DXVK_CONFIG", f"dxvk.numCompilerThreads={threads}", ";")
+
         self.check_environment("PROTON_NO_D3D11", "nod3d11")
         self.check_environment("PROTON_NO_D3D10", "nod3d10")
         self.check_environment("PROTON_NO_FSYNC", "nofsync")

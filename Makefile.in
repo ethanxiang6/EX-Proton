@@ -898,6 +898,12 @@ $(OBJ)/.vkd3d-proton-post-source:
 	echo "$(shell git -C $(SRCDIR) submodule status -- vkd3d-proton || echo no-git-repo-info)" > $(DST_LIBDIR)/wine/vkd3d-proton/version
 	touch $@
 
+##
+## EX-Proton extras (optional low-latency DXVK / vkd3d-proton builds)
+##
+include $(SRC)/extras/build-dxvk-low-latency.mk
+include $(SRC)/extras/build-vkd3d-low-latency.mk
+
 
 ##
 ## FEX
