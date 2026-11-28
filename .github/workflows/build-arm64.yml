@@ -1,0 +1,157 @@
+# EX-Proton ARM64 build (separate from the x86-64 build in build.yml).
+#
+# Valve's Proton tree builds for ARM64 with `configure.sh --target-arch=arm64`
+# in its arm64 Steam Runtime SDK container, and needs an ARM64 build machine
+# (README.md, "ARM64 Builds"). The result runs x86 Windows games on
+# ARM64 Linux through FEX, which the base bundles. It cannot be used by x86
+# Steam running under FEX.
+
+name: Build EX-Proton (ARM64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-name:
+        description: "Build name (shown in Steam, used for the tarball name)"
+        required: false
+        default: "EX-Proton1-2-aarch64"
+        type: string
+
+concurrency:
+  group: ex-proton-build-arm64-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 355
+    env:
+      INPUT_BUILD_NAME: ${{ inputs.build-name }}
+      CCACHE_MAXSIZE: 6G
+    steps:
+      - name: Determine build name
+        id: name
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="${INPUT_BUILD_NAME:-EX-Proton1-2-aarch64}"
+          if ! [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Invalid build name: '$name'" >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Build name: $name"
+
+      # Plain removal of large preinstalled toolchains (the x86-64 job's
+      # third-party action lists packages that do not all exist on arm64).
+      - name: Free disk space
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+                      /opt/hostedtoolcache /usr/share/swift /usr/local/share/powershell \
+                      /usr/local/share/chromium /usr/local/lib/node_modules || true
+          sudo docker image prune --all --force || true
+          sudo swapoff -a || true
+          df -h /
+
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: false
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v4.3.0
+        with:
+          path: ~/.ccache
+          key: ccache-ex-proton-arm64-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-ex-proton-arm64-${{ runner.os }}-
+
+      - name: Prepare (submodules, submodule patches)
+        run: ./scripts/prepare.sh --jobs "$(nproc)" --target-arch arm64
+
+      # CI only: build without debug info so the build fits on the runner's
+      # disk. The x86-64 job's patch (-ggdb -> -s) does not work here: the ARM64
+      # SDK compiles with clang, which rejects the link-only -s in meson's
+      # compile checks (dav1d: "Atomics not supported"). -g0 has the same effect
+      # on disk; the dist files are stripped by the build either way.
+      - name: Build without debug info (CI disk saving)
+        run: |
+          sed -i 's/^CFLAGS += -ggdb /CFLAGS += -g0 /' Makefile.in
+          grep -n '^CFLAGS += -g0 ' Makefile.in
+
+      - name: Configure
+        shell: bash
+        env:
+          BUILD_NAME: ${{ steps.name.outputs.name }}
+        run: |
+          set -euo pipefail
+          mkdir build
+          cd build
+          ../configure.sh --target-arch=arm64 --enable-ccache --container-engine=docker --build-name="$BUILD_NAME"
+          make --silent get-steamrt-image || true
+
+      # Bounded below the job timeout so that the ccache is still saved if the
+      # first (cold-cache) build runs out of time; a rerun then continues from it.
+      - name: Make redist
+        working-directory: ./build
+        timeout-minutes: 300
+        run: |
+          df -h
+          make -j"$(nproc)" redist
+
+      - name: Disk usage after build
+        if: always()
+        run: df -h
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4.3.0
+        with:
+          path: ~/.ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+
+      - name: Package tarball
+        shell: bash
+        env:
+          BUILD_NAME: ${{ steps.name.outputs.name }}
+        run: |
+          set -euo pipefail
+          cd build
+          test -f redist/compatibilitytool.vdf
+          test -x redist/proton
+          test -f redist/LICENSE
+          cat redist/version
+          cat redist/toolmanifest.vdf
+          tar --owner=0 --group=0 --numeric-owner --transform "s,^redist,${BUILD_NAME}," \
+              -czf "${BUILD_NAME}.tar.gz" redist
+          sha512sum "${BUILD_NAME}.tar.gz" > "${BUILD_NAME}.sha512sum"
+          ls -lh "${BUILD_NAME}.tar.gz" "${BUILD_NAME}.sha512sum"
+          tar -tzf "${BUILD_NAME}.tar.gz" > tarball-contents.txt
+          grep -x "${BUILD_NAME}/compatibilitytool.vdf" tarball-contents.txt
+          echo "== FEX:"; grep -c -i "fex" tarball-contents.txt || true
+          echo "== aarch64 / arm64ec Windows DLL dirs:"; grep -c "/aarch64-windows/" tarball-contents.txt || true
+          echo "== low-latency DXVK / vkd3d:"; grep -c "/lib/wine/dxvk-low-latency/\|/lib/wine/vkd3d-low-latency/" tarball-contents.txt || true
+          echo "== protonfixes:"; grep -c "^${BUILD_NAME}/protonfixes/" tarball-contents.txt || true
+          echo "== low-latency layer:"; grep "low_latency_layer.json\|libVkLayer_KORTHOS" tarball-contents.txt || true
+          df -h
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: ${{ steps.name.outputs.name }}.tar.gz
+          path: ./build/${{ steps.name.outputs.name }}.tar.gz
+          if-no-files-found: error
+
+      - name: Upload checksum
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: ${{ steps.name.outputs.name }}.sha512sum
+          path: ./build/${{ steps.name.outputs.name }}.sha512sum
+          if-no-files-found: error
