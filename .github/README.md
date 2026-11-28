@@ -23,9 +23,10 @@ still describes how the Proton build system works.
 
 | Build | For | Status |
 |---|---|---|
-| `EX-Proton1-1` | x86-64 Linux PCs | Released, tested in a game (previous base) |
-| `EX-Proton1-1-aarch64` | ARM64 Linux machines (x86 games through FEX) | Released as a pre-release, untested on hardware |
-| `EX-Proton1-2` / `EX-Proton1-2-aarch64` | This fork, on Proton Experimental `20261123b` | Built in CI, not yet released or tested |
+| `EX-Proton1-2` | x86-64 Linux PCs; this fork, on Proton Experimental `20261123b` | Released, not yet tested in a game |
+| `EX-Proton1-2-aarch64` | ARM64 Linux machines (x86 games through FEX) | Released as a pre-release, untested on hardware |
+| `EX-Proton1-1` | x86-64, previous base (Experimental `20261105c`, no Discord bridge) | Released, tested in a game |
+| `EX-Proton1-1-aarch64` | ARM64, previous base | Released as a pre-release, untested on hardware |
 
 Nothing has been benchmarked. Do not assume any performance or latency gain.
 
