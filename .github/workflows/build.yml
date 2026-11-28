@@ -34,7 +34,10 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-latest (Ubuntu 26.04 runners) wineboot fails inside the
+    # Steam Runtime build container ("wine: socket : Function not implemented")
+    # while creating the default prefix.
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     permissions:
       contents: read
@@ -186,7 +189,7 @@ jobs:
     name: Release
     needs: build
     if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: write
