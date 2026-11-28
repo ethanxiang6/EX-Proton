@@ -19,6 +19,14 @@ import uuid
 import json
 import time
 
+# EX-Proton: umu-protonfixes (per-game fixes, upscaler downloads) when this
+# build ships it. A problem there must never stop a game from starting.
+try:
+    import protonfixes
+except Exception as e:
+    sys.stderr.write("Proton: protonfixes not available: " + repr(e) + "\n")
+    protonfixes = None
+
 from ctypes import CDLL
 from ctypes import CFUNCTYPE
 from ctypes import POINTER
@@ -1811,6 +1819,24 @@ class Session:
         # leave two cores free on machines with more than four.
         self.check_environment("PROTON_DXVK_LOWLATENCY", "dxvklowlatency")
         self.check_environment("PROTON_VKD3D_LOWLATENCY", "vkd3dlowlatency")
+
+        # EX-Proton: Vulkan low-latency layer (Korthos low_latency_layer).
+        self.check_environment("LOW_LATENCY_LAYER", "lowlatencylayer")
+        if "lowlatencylayer" in self.compat_config:
+            layer_dir = g_proton.dist_dir + "share/low_latency_layer/implicit_layer.d"
+            if os.path.isdir(layer_dir):
+                append_to_env_str(self.env, "VK_IMPLICIT_LAYER_PATH", layer_dir, ":")
+            else:
+                log("LOW_LATENCY_LAYER set but this build has no low_latency_layer")
+
+        # EX-Proton: PROTON_FSR4_UPGRADE=1 has protonfixes download AMD's FSR4
+        # DLL into the prefix and enables Wine's amdxc64 FSR 3.1 -> FSR4 upgrade.
+        self.check_environment("PROTON_FSR4_UPGRADE", "fsr4")
+
+        # EX-Proton: PROTON_LOCAL_SHADER_CACHE=1 keeps a per-game driver, DXVK and
+        # vkd3d-proton shader cache in the game's Steam shader directory (for use
+        # with Steam's shader pre-caching switched off). Set up by protonfixes.
+        self.check_environment("PROTON_LOCAL_SHADER_CACHE", "localshadercache")
         if "dxvklowlatency" in self.compat_config:
             cpus = os.cpu_count() or 1
             threads = cpus - (2 if cpus > 4 else (1 if cpus > 2 else 0))
@@ -2235,6 +2261,25 @@ if __name__ == "__main__":
         g_proton.make_default_prefix()
 
     g_session.init_session(sys.argv[1] != "runinprefix")
+
+    # EX-Proton: protonfixes execution (same order as Proton-GE).
+    if protonfixes is not None:
+        try:
+            protonfixes.setup(g_session.env, "PATH", ld_path_var, prepend_to_env_str)
+            protonfixes.setup_mount_drives(setup_dir_drive)
+            protonfixes.winetricks(g_session.env, g_proton.wine_bin, g_proton.wineserver_bin)
+            protonfixes.setup_frame_rate(g_session.env, append_to_env_str)
+            protonfixes.setup_local_shader_cache(g_session.compat_config, g_session.env)
+            # Only when asked for: without the flag this would switch off the
+            # base's own automatic FSR4 handling.
+            if "fsr4" in g_session.compat_config:
+                protonfixes.setup_upscalers(g_session.compat_config, g_session.env,
+                                            g_compatdata.base_dir, g_compatdata.prefix_dir)
+            protonfixes.execute()
+        except SystemExit:
+            raise
+        except Exception as e:
+            log("protonfixes failed, continuing without it: " + repr(e))
 
     #determine mode
     rc = 0
